@@ -29,6 +29,7 @@ import {
 } from "./db/repository";
 import { LandingPageView } from "./views/landing";
 import { resolveLocale } from "./views/i18n";
+import { MCP_BUNDLE_JS } from "./mcp-bundle";
 
 export interface VectorMatch {
   readonly id: string;
@@ -381,6 +382,16 @@ const approveBodySchema = z.object({
 export function createApp() {
   const app = new Hono<AppEnv>();
 
+  app.get("/mcp.mjs", () => {
+    return new Response(MCP_BUNDLE_JS, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/javascript; charset=utf-8",
+        "Cache-Control": "public, max-age=3600, s-maxage=86400",
+      },
+    });
+  });
+
   app.get("/install.sh", (c) => {
     const origin = new URL(c.req.url).origin;
     const script = `#!/usr/bin/env sh
@@ -388,6 +399,8 @@ set -e
 
 API_URL="\${AGENTLORE_API_URL:-${origin}}"
 CLIENT="\${AGENTLORE_CLIENT:-all}"
+INSTALL_DIR="\${HOME}/.mol"
+MCP_FILE="\${INSTALL_DIR}/mcp.mjs"
 
 echo "============================================="
 echo "  mol - AI Agent Knowledge Platform Installer"
@@ -396,17 +409,30 @@ echo "Target API: \${API_URL}"
 echo "Client Target: \${CLIENT}"
 echo ""
 
-if command -v npx >/dev/null 2>&1; then
-  npx -y @agentlore/mcp-server install --api "\${API_URL}" --client "\${CLIENT}"
-elif command -v bunx >/dev/null 2>&1; then
-  bunx @agentlore/mcp-server install --api "\${API_URL}" --client "\${CLIENT}"
+mkdir -p "\${INSTALL_DIR}"
+
+echo "Fetching standalone mol MCP runtime..."
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL "\${API_URL}/mcp.mjs" -o "\${MCP_FILE}"
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO "\${MCP_FILE}" "\${API_URL}/mcp.mjs"
 else
-  echo "[ERROR] Node.js (npx) or Bun (bunx) is required to run the mol installer."
+  echo "[ERROR] curl or wget is required to download mol MCP bundle."
+  exit 1
+fi
+chmod +x "\${MCP_FILE}"
+
+if command -v node >/dev/null 2>&1; then
+  node "\${MCP_FILE}" install --api "\${API_URL}" --client "\${CLIENT}"
+elif command -v bun >/dev/null 2>&1; then
+  bun "\${MCP_FILE}" install --api "\${API_URL}" --client "\${CLIENT}"
+else
+  echo "[ERROR] Node.js or Bun is required to run the mol installer."
   exit 1
 fi
 
 echo ""
-echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Codex to activate."
+echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Codex / Windsurf to activate."
 `;
     c.header("Content-Type", "text/x-shellscript; charset=utf-8");
     c.header("Cache-Control", "public, max-age=300");

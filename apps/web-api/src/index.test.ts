@@ -332,7 +332,13 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     expect(installShRes.status).toBe(200);
     expect(installShRes.headers.get("Content-Type")).toContain("text/x-shellscript");
     const installShText = await installShRes.text();
-    expect(installShText).toContain("@agentlore/mcp-server install");
+    expect(installShText).toContain("/mcp.mjs");
+
+    const mcpMjsRes = await app.request("http://localhost/mcp.mjs", {}, bindings);
+    expect(mcpMjsRes.status).toBe(200);
+    expect(mcpMjsRes.headers.get("Content-Type")).toContain("application/javascript");
+    const mcpText = await mcpMjsRes.text();
+    expect(mcpText).toContain("createAgentLoreMcpServer");
 
     const reviewerPostRes = await app.request(
       "http://localhost/api/v1/posts",

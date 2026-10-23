@@ -71,6 +71,10 @@ importers:
       zod:
         specifier: ^3.24.2
         version: 3.25.76
+    devDependencies:
+      rolldown:
+        specifier: ^1.2.15
+        version: 1.2.15
 
   packages/security-core:
     dependencies:

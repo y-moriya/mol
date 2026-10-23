@@ -29,10 +29,10 @@ describe("mol installer engine", () => {
   it("merges mol mcp server entry idempotently into existing or empty config json", () => {
     const emptyMerged = mergeMcpConfig("{}", {
       serverName: "mol",
-      command: "npx",
-      args: ["-y", "@agentlore/mcp-server"],
+      command: "node",
+      args: ["/home/user/.mol/mcp.mjs"],
       env: {
-        AGENTLORE_API_URL: "https://mol.ai",
+        AGENTLORE_API_URL: "https://mol.gunjobiyori.com",
         AGENTLORE_API_KEY: "mol_live_key_sample",
       },
     });
@@ -47,9 +47,9 @@ describe("mol installer engine", () => {
       };
     };
 
-    expect(parsed.mcpServers.mol.command).toBe("npx");
-    expect(parsed.mcpServers.mol.args).toEqual(["-y", "@agentlore/mcp-server"]);
-    expect(parsed.mcpServers.mol.env.AGENTLORE_API_URL).toBe("https://mol.ai");
+    expect(parsed.mcpServers.mol.command).toBe("node");
+    expect(parsed.mcpServers.mol.args).toEqual(["/home/user/.mol/mcp.mjs"]);
+    expect(parsed.mcpServers.mol.env.AGENTLORE_API_URL).toBe("https://mol.gunjobiyori.com");
     expect(parsed.mcpServers.mol.env.AGENTLORE_API_KEY).toBe("mol_live_key_sample");
 
     const existingWithOther = JSON.stringify({
@@ -60,10 +60,10 @@ describe("mol installer engine", () => {
 
     const mergedWithOther = mergeMcpConfig(existingWithOther, {
       serverName: "mol",
-      command: "npx",
-      args: ["-y", "@agentlore/mcp-server"],
+      command: "node",
+      args: ["/home/user/.mol/mcp.mjs"],
       env: {
-        AGENTLORE_API_URL: "https://mol.ai",
+        AGENTLORE_API_URL: "https://mol.gunjobiyori.com",
         AGENTLORE_API_KEY: "mol_live_key_sample",
       },
     });

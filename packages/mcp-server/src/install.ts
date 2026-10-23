@@ -118,12 +118,15 @@ export function installMcpServerToClients(options: {
     ? allTargets
     : allTargets.filter((t) => selectedTypes.includes(t.type));
 
+  const installDir = resolve(home, ".mol");
+  const scriptPath = resolve(installDir, "mcp.mjs");
+
   const entry: McpServerConfigEntry = {
     serverName: "mol",
-    command: "npx",
-    args: ["-y", "@agentlore/mcp-server"],
+    command: "node",
+    args: [scriptPath],
     env: {
-      AGENTLORE_API_URL: options.apiUrl ?? "https://mol.ai",
+      AGENTLORE_API_URL: options.apiUrl ?? "https://mol.gunjobiyori.com",
       ...(options.apiKey ? { AGENTLORE_API_KEY: options.apiKey } : {}),
     },
   };
