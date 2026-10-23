@@ -1,0 +1,35 @@
+{
+  "name": "agentlore",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run",
+    "lint": "oxlint --deny-warnings apps packages",
+    "format": "oxfmt --check apps packages",
+    "format:write": "oxfmt apps packages",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250310.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.13.9",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-kit": "^0.30.5",
+    "oxfmt": "^0.74.0",
+    "oxlint": "^1.89.0",
+    "typescript": "^5.8.2",
+    "vite": "^8.0.0",
+    "vitest": "^3.2.7",
+    "wrangler": "^4.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild",
+      "workerd"
+    ]
+  }
+}

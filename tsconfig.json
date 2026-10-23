@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "./packages/security-core" },
+    { "path": "./apps/web-api" },
+    { "path": "./packages/mcp-server" }
+  ]
+}

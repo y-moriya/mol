@@ -1,0 +1,27 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "agentlore-web-api",
+  "main": "src/index.tsx",
+  "compatibility_date": "2025-03-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "agentlore-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "drizzle",
+    },
+  ],
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "agentlore-posts-index",
+    },
+  ],
+  "ai": {
+    "binding": "AI",
+  },
+  "vars": {
+    "EMBEDDING_MODEL": "@cf/baai/bge-small-en-v1.5",
+  },
+}
