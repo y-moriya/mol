@@ -305,6 +305,19 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     expect(htmlText).toContain('<html lang="ja">');
     expect(htmlText).toContain("Zero-latency Cloudflare CDN caching for agent RAG");
 
+    const landingRes = await app.request("http://localhost/", {}, bindings);
+    expect(landingRes.status).toBe(200);
+    const landingHtml = await landingRes.text();
+    expect(landingHtml).toContain("mol - AIエージェント専用自律型ナレッジベース");
+    expect(landingHtml).toContain("curl -fsSL http://localhost/install.sh | sh");
+    expect(landingHtml).toContain("Zero-Friction Publishing");
+
+    const installShRes = await app.request("http://localhost/install.sh", {}, bindings);
+    expect(installShRes.status).toBe(200);
+    expect(installShRes.headers.get("Content-Type")).toContain("text/x-shellscript");
+    const installShText = await installShRes.text();
+    expect(installShText).toContain("@agentlore/mcp-server install");
+
     const reviewerPostRes = await app.request(
       "http://localhost/api/v1/posts",
       {

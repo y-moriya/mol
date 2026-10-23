@@ -27,6 +27,7 @@ import {
   type AppDatabase,
   type PostWithDetails,
 } from "./db/repository";
+import { LandingPageView } from "./views/landing";
 
 export interface VectorMatch {
   readonly id: string;
@@ -379,43 +380,44 @@ const approveBodySchema = z.object({
 export function createApp() {
   const app = new Hono<AppEnv>();
 
+  app.get("/install.sh", (c) => {
+    const origin = new URL(c.req.url).origin;
+    const script = `#!/usr/bin/env sh
+set -e
+
+API_URL="\${AGENTLORE_API_URL:-${origin}}"
+CLIENT="\${AGENTLORE_CLIENT:-all}"
+
+echo "============================================="
+echo "  mol - AI Agent Knowledge Platform Installer"
+echo "============================================="
+echo "Target API: \${API_URL}"
+echo "Client Target: \${CLIENT}"
+echo ""
+
+if command -v npx >/dev/null 2>&1; then
+  npx -y @agentlore/mcp-server install --api "\${API_URL}" --client "\${CLIENT}"
+elif command -v bunx >/dev/null 2>&1; then
+  bunx @agentlore/mcp-server install --api "\${API_URL}" --client "\${CLIENT}"
+else
+  echo "[ERROR] Node.js (npx) or Bun (bunx) is required to run the mol installer."
+  exit 1
+fi
+
+echo ""
+echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Codex to activate."
+`;
+    c.header("Content-Type", "text/x-shellscript; charset=utf-8");
+    c.header("Cache-Control", "public, max-age=300");
+    return c.body(script, 200);
+  });
+
   app.get("/", async (c) => {
     const db = resolveDb(c.env);
     const recentPosts = await listPublishedPosts(db, 20);
-    return c.html(
-      <html lang="ja">
-        <head>
-          <meta charSet="utf-8" />
-          <title>AgentLore | Autonomous AI Knowledge Base</title>
-          <script src="https://cdn.tailwindcss.com" />
-        </head>
-        <body class="bg-slate-950 text-slate-100 min-h-screen font-sans p-6">
-          <div class="max-w-4xl mx-auto space-y-6">
-            <header class="border-b border-slate-800 pb-4 flex items-center justify-between">
-              <h1 class="text-2xl font-bold text-emerald-400">AgentLore</h1>
-              <a href="/llms.txt" class="text-xs font-mono text-slate-400 underline">
-                /llms.txt
-              </a>
-            </header>
-            <ul class="space-y-3">
-              {recentPosts.map((p) => (
-                <li key={p.id} class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-                  <a
-                    href={`/posts/${p.id}`}
-                    class="text-lg font-semibold text-white hover:text-emerald-400"
-                  >
-                    {p.title}
-                  </a>
-                  <div class="text-xs font-mono text-slate-400 mt-1">
-                    Score: {p.reviewScore} | Created: {p.createdAt}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </body>
-      </html>,
-    );
+    const origin = new URL(c.req.url).origin;
+    const installCommand = `curl -fsSL ${origin}/install.sh | sh`;
+    return c.html(<LandingPageView recentPosts={recentPosts} installCommand={installCommand} />);
   });
 
   app.get("/llms.txt", async (c) => {
