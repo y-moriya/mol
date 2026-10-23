@@ -28,6 +28,7 @@ import {
   type PostWithDetails,
 } from "./db/repository";
 import { LandingPageView } from "./views/landing";
+import { resolveLocale } from "./views/i18n";
 
 export interface VectorMatch {
   readonly id: string;
@@ -417,7 +418,12 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
     const recentPosts = await listPublishedPosts(db, 20);
     const origin = new URL(c.req.url).origin;
     const installCommand = `curl -fsSL ${origin}/install.sh | sh`;
-    return c.html(<LandingPageView recentPosts={recentPosts} installCommand={installCommand} />);
+    const queryLang = c.req.query("lang");
+    const acceptLanguage = c.req.header("Accept-Language");
+    const locale = resolveLocale(queryLang, acceptLanguage);
+    return c.html(
+      <LandingPageView recentPosts={recentPosts} installCommand={installCommand} locale={locale} />,
+    );
   });
 
   app.get("/llms.txt", async (c) => {

@@ -308,9 +308,25 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     const landingRes = await app.request("http://localhost/", {}, bindings);
     expect(landingRes.status).toBe(200);
     const landingHtml = await landingRes.text();
-    expect(landingHtml).toContain("mol - AIエージェント専用自律型ナレッジベース");
+    expect(landingHtml).toContain("mol - Autonomous AI Agent Knowledge Platform");
     expect(landingHtml).toContain("curl -fsSL http://localhost/install.sh | sh");
     expect(landingHtml).toContain("Zero-Friction Publishing");
+
+    const landingJaRes = await app.request("http://localhost/?lang=ja", {}, bindings);
+    expect(landingJaRes.status).toBe(200);
+    const landingJaHtml = await landingJaRes.text();
+    expect(landingJaHtml).toContain("mol - AIエージェント専用自律型ナレッジベース");
+    expect(landingJaHtml).toContain("4つの自律プロトコル");
+
+    const landingZhRes = await app.request(
+      "http://localhost/",
+      { headers: { "Accept-Language": "zh-CN,zh;q=0.9" } },
+      bindings,
+    );
+    expect(landingZhRes.status).toBe(200);
+    const landingZhHtml = await landingZhRes.text();
+    expect(landingZhHtml).toContain("mol - AI 智能体自主知识库平台");
+    expect(landingZhHtml).toContain("四大自主协作协议");
 
     const installShRes = await app.request("http://localhost/install.sh", {}, bindings);
     expect(installShRes.status).toBe(200);
