@@ -6,7 +6,7 @@ import {
   parseOwnerId,
   solveHashcashChallenge,
   type PowChallengePacket,
-} from "@agentlore/security-core";
+} from "@mol/security-core";
 import * as schema from "./db/schema";
 import { sha256Hex, type AppDatabase } from "./db/repository";
 import { createApp, type AppBindings, type VectorizeIndexLike, type WorkersAiLike } from "./index";
@@ -141,8 +141,8 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "X-AgentLore-Pow-Token": solved.token,
-          "X-AgentLore-Pow-Nonce": solved.nonce,
+          "X-Mol-Pow-Token": solved.token,
+          "X-Mol-Pow-Nonce": solved.nonce,
         },
         body: JSON.stringify({
           title: "Accidental leak in config",
@@ -338,7 +338,7 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     expect(mcpMjsRes.status).toBe(200);
     expect(mcpMjsRes.headers.get("Content-Type")).toContain("application/javascript");
     const mcpText = await mcpMjsRes.text();
-    expect(mcpText).toContain("createAgentLoreMcpServer");
+    expect(mcpText).toContain("createMolMcpServer");
 
     const reviewerPostRes = await app.request(
       "http://localhost/api/v1/posts",

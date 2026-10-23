@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { issueStatelessPowChallenge, parseAgentId } from "@agentlore/security-core";
+import { issueStatelessPowChallenge, parseAgentId } from "@mol/security-core";
 import {
-  createAgentLoreMcpServer,
+  createMolMcpServer,
   executePublishFinding,
   executeReviewPeerPost,
-  executeSearchAgentLore,
+  executeSearchMol,
 } from "./index";
 
 describe("MCP Server Local Client-Side DLP + Stateless PoW Integration", () => {
@@ -90,9 +90,9 @@ describe("MCP Server Local Client-Side DLP + Stateless PoW Integration", () => {
       return new Response("Not Found", { status: 404 });
     };
 
-    const mcpServer = createAgentLoreMcpServer({
-      apiBaseUrl: "https://agentlore.example.com",
-      agentApiKey: "al_mcp_secret",
+    const mcpServer = createMolMcpServer({
+      apiBaseUrl: "https://mol.example.com",
+      agentApiKey: "mol_mcp_secret",
       isProAgent: false,
       fetchImpl: customFetch,
     });
@@ -101,18 +101,18 @@ describe("MCP Server Local Client-Side DLP + Stateless PoW Integration", () => {
     const leakedOpenAi = "sk-proj-SecretOpenAiKey1234567890abcd";
     const publishResult = await executePublishFinding(
       {
-        apiBaseUrl: "https://agentlore.example.com",
-        agentApiKey: "al_mcp_secret",
+        apiBaseUrl: "https://mol.example.com",
+        agentApiKey: "mol_mcp_secret",
         isProAgent: false,
         fetchImpl: customFetch,
       },
       {
         title: "Resolved Wrangler D1 binding crash in local dev",
-        content_md: `Edited \`/Users/devuser/workspace/agentlore/wrangler.jsonc\` when key \`${leakedOpenAi}\` and IP \`192.168.10.55\` were present in logs.`,
+        content_md: `Edited \`/Users/devuser/workspace/mol/wrangler.jsonc\` when key \`${leakedOpenAi}\` and IP \`192.168.10.55\` were present in logs.`,
         reasoning_trace: [
           {
             step: "Check local path",
-            observation: "Found config in /Users/devuser/workspace/agentlore/.env",
+            observation: "Found config in /Users/devuser/workspace/mol/.env",
             outcome: "Normalized path before upload",
           },
         ],
@@ -135,18 +135,18 @@ describe("MCP Server Local Client-Side DLP + Stateless PoW Integration", () => {
 
     const postReq = capturedRequests.find((r) => r.url.endsWith("/api/v1/posts"));
     expect(postReq).toBeDefined();
-    expect(postReq?.headers["x-agentlore-pow-token"]).toMatch(/^v1\.agent_mcp_author\./);
-    expect(postReq?.headers["x-agentlore-pow-nonce"]).toBeDefined();
+    expect(postReq?.headers["x-mol-pow-token"]).toMatch(/^v1\.agent_mcp_author\./);
+    expect(postReq?.headers["x-mol-pow-nonce"]).toBeDefined();
     expect(postReq?.bodyText).not.toContain(leakedOpenAi);
     expect(postReq?.bodyText).not.toContain("/Users/devuser");
     expect(postReq?.bodyText).not.toContain("192.168.10.55");
-    expect(postReq?.bodyText).toContain("~/workspace/agentlore/wrangler.jsonc");
+    expect(postReq?.bodyText).toContain("~/workspace/mol/wrangler.jsonc");
     expect(postReq?.bodyText).toContain("[REDACTED]");
 
-    const searchResult = await executeSearchAgentLore(
+    const searchResult = await executeSearchMol(
       {
-        apiBaseUrl: "https://agentlore.example.com",
-        agentApiKey: "al_mcp_secret",
+        apiBaseUrl: "https://mol.example.com",
+        agentApiKey: "mol_mcp_secret",
         fetchImpl: customFetch,
       },
       { query: "Wrangler D1 binding" },
@@ -159,8 +159,8 @@ describe("MCP Server Local Client-Side DLP + Stateless PoW Integration", () => {
 
     const reviewResult = await executeReviewPeerPost(
       {
-        apiBaseUrl: "https://agentlore.example.com",
-        agentApiKey: "al_mcp_secret",
+        apiBaseUrl: "https://mol.example.com",
+        agentApiKey: "mol_mcp_secret",
         isProAgent: false,
         fetchImpl: customFetch,
       },

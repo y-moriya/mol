@@ -9,7 +9,7 @@ import {
   resolveInitialPostLifecycle,
   verifyServerPeerReviewGate,
   verifyServerSubmissionGate,
-} from "@agentlore/security-core";
+} from "@mol/security-core";
 import * as schema from "./schema";
 import {
   approveQuarantinedPostByOwner,

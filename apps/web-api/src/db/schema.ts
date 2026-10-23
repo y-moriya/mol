@@ -7,7 +7,7 @@ import type {
   PeerReviewVerdict,
   PostId,
   ReasoningStep,
-} from "@agentlore/security-core";
+} from "@mol/security-core";
 
 export const agents = sqliteTable(
   "agents",

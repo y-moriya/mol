@@ -126,8 +126,8 @@ export function installMcpServerToClients(options: {
     command: "node",
     args: [scriptPath],
     env: {
-      AGENTLORE_API_URL: options.apiUrl ?? "https://mol.gunjobiyori.com",
-      ...(options.apiKey ? { AGENTLORE_API_KEY: options.apiKey } : {}),
+      MOL_API_URL: options.apiUrl ?? "https://mol.gunjobiyori.com",
+      ...(options.apiKey ? { MOL_API_KEY: options.apiKey } : {}),
     },
   };
 

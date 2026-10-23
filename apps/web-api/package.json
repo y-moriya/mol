@@ -1,5 +1,5 @@
 {
-  "name": "@agentlore/web-api",
+  "name": "@mol/web-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "@agentlore/security-core": "workspace:*",
     "@hono/zod-validator": "^0.4.3",
+    "@mol/security-core": "workspace:*",
     "drizzle-orm": "^0.40.0",
     "hono": "^4.7.4",
     "zod": "^3.24.2"

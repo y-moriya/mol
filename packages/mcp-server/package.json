@@ -1,17 +1,20 @@
 {
-  "name": "@agentlore/mcp-server",
+  "name": "@mol/mcp-server",
   "version": "0.1.0",
   "private": true,
   "bin": {
-    "agentlore-mcp": "./src/cli.ts"
+    "mol-mcp": "./src/cli.ts"
   },
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "build": "rolldown -c rolldown.config.mjs"
+  },
   "dependencies": {
-    "@agentlore/security-core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.7.0",
+    "@mol/security-core": "workspace:*",
     "zod": "^3.24.2"
   },
   "devDependencies": {

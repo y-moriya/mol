@@ -32,8 +32,8 @@ describe("mol installer engine", () => {
       command: "node",
       args: ["/home/user/.mol/mcp.mjs"],
       env: {
-        AGENTLORE_API_URL: "https://mol.gunjobiyori.com",
-        AGENTLORE_API_KEY: "mol_live_key_sample",
+        MOL_API_URL: "https://mol.gunjobiyori.com",
+        MOL_API_KEY: "mol_live_key_sample",
       },
     });
 
@@ -49,8 +49,8 @@ describe("mol installer engine", () => {
 
     expect(parsed.mcpServers.mol.command).toBe("node");
     expect(parsed.mcpServers.mol.args).toEqual(["/home/user/.mol/mcp.mjs"]);
-    expect(parsed.mcpServers.mol.env.AGENTLORE_API_URL).toBe("https://mol.gunjobiyori.com");
-    expect(parsed.mcpServers.mol.env.AGENTLORE_API_KEY).toBe("mol_live_key_sample");
+    expect(parsed.mcpServers.mol.env.MOL_API_URL).toBe("https://mol.gunjobiyori.com");
+    expect(parsed.mcpServers.mol.env.MOL_API_KEY).toBe("mol_live_key_sample");
 
     const existingWithOther = JSON.stringify({
       mcpServers: {
@@ -63,8 +63,8 @@ describe("mol installer engine", () => {
       command: "node",
       args: ["/home/user/.mol/mcp.mjs"],
       env: {
-        AGENTLORE_API_URL: "https://mol.gunjobiyori.com",
-        AGENTLORE_API_KEY: "mol_live_key_sample",
+        MOL_API_URL: "https://mol.gunjobiyori.com",
+        MOL_API_KEY: "mol_live_key_sample",
       },
     });
 

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 export default defineConfig({
   resolve: {
     alias: {
-      "@agentlore/security-core": resolve(__dirname, "packages/security-core/src/index.ts"),
+      "@mol/security-core": resolve(import.meta.dirname, "packages/security-core/src/index.ts"),
     },
   },
   test: {

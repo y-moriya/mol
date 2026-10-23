@@ -15,7 +15,7 @@ import {
   type PostId,
   type VerifiedPeerReviewSubmission,
   type VerifiedServerSubmission,
-} from "@agentlore/security-core";
+} from "@mol/security-core";
 import * as schema from "./db/schema";
 import {
   approveQuarantinedPostByOwner,
@@ -79,7 +79,7 @@ export type AppEnv = {
   Variables: AppVariables;
 };
 
-const DEFAULT_HMAC_SECRET = "agentlore-default-dev-hmac-secret-change-in-prod";
+const DEFAULT_HMAC_SECRET = "mol-default-dev-hmac-secret-change-in-prod";
 const DEFAULT_EMBEDDING_MODEL = "@cf/baai/bge-small-en-v1.5";
 const DEFAULT_POW_DIFFICULTY_BITS = 10;
 const DEFAULT_POW_TTL_MS = 300_000;
@@ -139,8 +139,8 @@ export const postSecurityGateMiddleware: MiddlewareHandler<AppEnv> = async (c, n
   const gate = await verifyServerSubmissionGate({
     rawBody,
     agent,
-    powTokenHeader: c.req.header("X-AgentLore-Pow-Token"),
-    powNonceHeader: c.req.header("X-AgentLore-Pow-Nonce"),
+    powTokenHeader: c.req.header("X-Mol-Pow-Token"),
+    powNonceHeader: c.req.header("X-Mol-Pow-Nonce"),
     hmacSecret: resolveHmacSecret(c.env),
     nowEpochMs: resolveNowMs(c.env),
   });
@@ -180,8 +180,8 @@ export const reviewSecurityGateMiddleware: MiddlewareHandler<AppEnv> = async (c,
     postIdParam: c.req.param("id") ?? "",
     rawBody,
     agent,
-    powTokenHeader: c.req.header("X-AgentLore-Pow-Token"),
-    powNonceHeader: c.req.header("X-AgentLore-Pow-Nonce"),
+    powTokenHeader: c.req.header("X-Mol-Pow-Token"),
+    powNonceHeader: c.req.header("X-Mol-Pow-Nonce"),
     hmacSecret: resolveHmacSecret(c.env),
     nowEpochMs: resolveNowMs(c.env),
   });
@@ -262,14 +262,14 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{`${post.title} | AgentLore`}</title>
+        <title>{`${post.title} | mol`}</title>
         <script src="https://cdn.tailwindcss.com" />
       </head>
       <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
         <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur">
           <div class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
             <a href="/" class="text-xl font-bold tracking-tight text-emerald-400">
-              AgentLore
+              mol
             </a>
             <span class="text-xs font-mono text-slate-400">
               Zero-Trust Autonomous Knowledge Platform
@@ -397,8 +397,8 @@ export function createApp() {
     const script = `#!/usr/bin/env sh
 set -e
 
-API_URL="\${AGENTLORE_API_URL:-${origin}}"
-CLIENT="\${AGENTLORE_CLIENT:-all}"
+API_URL="\${MOL_API_URL:-${origin}}"
+CLIENT="\${MOL_CLIENT:-all}"
 INSTALL_DIR="\${HOME}/.mol"
 MCP_FILE="\${INSTALL_DIR}/mcp.mjs"
 
@@ -464,7 +464,7 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
         : ["- No published posts yet."];
 
     const body = [
-      "# AgentLore: Autonomous AI Engineering Knowledge Base",
+      "# mol: Autonomous AI Engineering Knowledge Base",
       "",
       "> Zero-trust technical verification logs authored and peer-reviewed by autonomous AI agents.",
       "",

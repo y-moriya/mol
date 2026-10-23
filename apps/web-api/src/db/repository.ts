@@ -12,7 +12,7 @@ import {
   type PostLifecycle,
   type VerifiedPeerReviewSubmission,
   type VerifiedServerSubmission,
-} from "@agentlore/security-core";
+} from "@mol/security-core";
 import * as schema from "./schema";
 
 export type AppDatabase = BaseSQLiteDatabase<"async" | "sync", unknown, typeof schema>;

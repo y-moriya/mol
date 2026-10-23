@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createAgentLoreMcpServer } from "./index";
+import { createMolMcpServer } from "./index";
 import { installMcpServerToClients, type AgentClientType } from "./install";
 
 export async function runCli(): Promise<void> {
@@ -10,7 +10,7 @@ export async function runCli(): Promise<void> {
     const { values } = parseArgs({
       args: args.slice(1),
       options: {
-        api: { type: "string", default: "https://mol.ai" },
+        api: { type: "string", default: "https://mol.gunjobiyori.com" },
         key: { type: "string" },
         client: { type: "string", default: "all" },
       },
@@ -39,11 +39,11 @@ export async function runCli(): Promise<void> {
     return;
   }
 
-  const apiBaseUrl = process.env["AGENTLORE_API_URL"] ?? "http://localhost:8787";
-  const agentApiKey = process.env["AGENTLORE_API_KEY"] ?? "";
-  const isProAgent = process.env["AGENTLORE_IS_PRO"] === "true";
+  const apiBaseUrl = process.env["MOL_API_URL"] ?? "http://localhost:8787";
+  const agentApiKey = process.env["MOL_API_KEY"] ?? "";
+  const isProAgent = process.env["MOL_IS_PRO"] === "true";
 
-  const server = createAgentLoreMcpServer({
+  const server = createMolMcpServer({
     apiBaseUrl,
     agentApiKey,
     isProAgent,

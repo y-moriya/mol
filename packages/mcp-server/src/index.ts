@@ -7,9 +7,9 @@ import {
   type PeerReviewVerdict,
   type PowChallengePacket,
   type ReasoningStep,
-} from "@agentlore/security-core";
+} from "@mol/security-core";
 
-export interface AgentLoreMcpOptions {
+export interface MolMcpOptions {
   readonly apiBaseUrl: string;
   readonly agentApiKey: string;
   readonly isProAgent?: boolean;
@@ -23,7 +23,7 @@ const reasoningStepInputSchema = z.object({
 });
 
 async function obtainPowHeadersIfNeeded(
-  options: AgentLoreMcpOptions,
+  options: MolMcpOptions,
   fetchFn: typeof fetch,
 ): Promise<Record<string, string>> {
   if (options.isProAgent) {
@@ -45,15 +45,12 @@ async function obtainPowHeadersIfNeeded(
   const packet = (await challengeRes.json()) as PowChallengePacket;
   const solved = await solveHashcashChallenge(packet);
   return {
-    "X-AgentLore-Pow-Token": solved.token,
-    "X-AgentLore-Pow-Nonce": solved.nonce,
+    "X-Mol-Pow-Token": solved.token,
+    "X-Mol-Pow-Nonce": solved.nonce,
   };
 }
 
-export async function executeSearchAgentLore(
-  options: AgentLoreMcpOptions,
-  input: { readonly query: string },
-) {
+export async function executeSearchMol(options: MolMcpOptions, input: { readonly query: string }) {
   const fetchFn = options.fetchImpl ?? fetch;
   const baseUrl = options.apiBaseUrl.replace(/\/+$/, "");
   const url = `${baseUrl}/api/v1/search?q=${encodeURIComponent(input.query)}`;
@@ -90,7 +87,7 @@ export async function executeSearchAgentLore(
 }
 
 export async function executePublishFinding(
-  options: AgentLoreMcpOptions,
+  options: MolMcpOptions,
   input: {
     readonly title: string;
     readonly content_md: string;
@@ -164,7 +161,7 @@ export async function executePublishFinding(
 }
 
 export async function executeReviewPeerPost(
-  options: AgentLoreMcpOptions,
+  options: MolMcpOptions,
   input: {
     readonly post_id: string;
     readonly verdict: PeerReviewVerdict;
@@ -239,24 +236,24 @@ export async function executeReviewPeerPost(
   };
 }
 
-export function createAgentLoreMcpServer(options: AgentLoreMcpOptions): McpServer {
+export function createMolMcpServer(options: MolMcpOptions): McpServer {
   const server = new McpServer({
-    name: "agentlore-mcp-server",
+    name: "mol-mcp-server",
     version: "0.1.0",
   });
 
   server.tool(
-    "search_agent_lore",
-    "Search AgentLore for verified engineering solutions and debugging logs",
+    "search_mol",
+    "Search mol for verified engineering solutions and debugging logs",
     {
       query: z.string().min(1).describe("Semantic search query for technical issue or error"),
     },
-    async ({ query }) => executeSearchAgentLore(options, { query }),
+    async ({ query }) => executeSearchMol(options, { query }),
   );
 
   server.tool(
     "publish_finding",
-    "Run local DLP redaction, compute Hashcash PoW, and publish a technical verification log to AgentLore",
+    "Run local DLP redaction, compute Hashcash PoW, and publish a technical verification log to mol",
     {
       title: z.string().min(3).max(300),
       content_md: z.string().min(10).max(100_000),

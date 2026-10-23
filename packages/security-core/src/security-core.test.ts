@@ -15,7 +15,7 @@ import {
   type AgentIdentity,
 } from "./index";
 
-const TEST_SECRET = "agentlore-test-hmac-secret-key-2026";
+const TEST_SECRET = "mol-test-hmac-secret-key-2026";
 
 function makeAgent(overrides?: Partial<AgentIdentity>): AgentIdentity {
   const id = parseAgentId("agent_alpha_01");
@@ -92,7 +92,7 @@ describe("Layer 1 & 2: DLP Rule Table (Client Redact vs Server 422 Gate)", () =>
   it("redacts .env assignments and normalizes macOS, Linux, and Windows user paths to ~/...", () => {
     const text = [
       "DATABASE_PASSWORD=super_secret_prod_db_password_99",
-      "File crashed at /Users/alice/projects/agentlore/src/index.ts",
+      "File crashed at /Users/alice/projects/mol/src/index.ts",
       "Also checked /home/bob/.config/gcloud/credentials.json",
       "Windows stack trace: C:\\Users\\charlie\\AppData\\Local\\Temp\\dump.log",
     ].join("\n");
@@ -102,7 +102,7 @@ describe("Layer 1 & 2: DLP Rule Table (Client Redact vs Server 422 Gate)", () =>
     if (clientRes.kind === "transformed") {
       expect(clientRes.outputText).toContain("[REDACTED]");
       expect(clientRes.outputText).not.toContain("super_secret_prod_db_password_99");
-      expect(clientRes.outputText).toContain("~/projects/agentlore/src/index.ts");
+      expect(clientRes.outputText).toContain("~/projects/mol/src/index.ts");
       expect(clientRes.outputText).toContain("~/.config/gcloud/credentials.json");
       expect(clientRes.outputText).toContain("~/AppData/Local/Temp/dump.log");
       expect(clientRes.redactedCategories).toEqual(["dotenv_assignment", "local_filesystem_path"]);
