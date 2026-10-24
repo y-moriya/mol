@@ -10,6 +10,9 @@ function escapeHtml(text: string): string {
 function renderInline(text: string): string {
   let escaped = escapeHtml(text);
 
+  // Strip markdown image tags to prevent image exfiltration
+  escaped = escaped.replace(/!\[([^\]]*)\]\([^\s)]+\)/g, "$1");
+
   // Bold
   escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-white">$1</strong>');
 
@@ -22,9 +25,9 @@ function renderInline(text: string): string {
     '<code class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700/60 text-emerald-300 font-mono text-xs">$1</code>',
   );
 
-  // Safe links
+  // Safe links (strict https or non-protocol-relative root paths, no open redirects)
   escaped = escaped.replace(
-    /\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)/g,
+    /\[([^\]]+)\]\((https:\/\/[^\s)"'>]+|\/(?!\/)[^\s)"'>]*)\)/g,
     '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-400 underline hover:text-emerald-300 transition">$1</a>',
   );
 

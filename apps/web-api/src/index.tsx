@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { raw } from "hono/html";
 import { z } from "zod";
 import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
 import {
   brandIsoTimestamp,
   issueStatelessPowChallenge,
@@ -140,6 +141,22 @@ export const requireAgentAuthMiddleware: MiddlewareHandler<AppEnv> = async (c, n
   await next();
 };
 
+const spentPowTokens = new Map<string, number>();
+
+function isTokenSpent(token: string): boolean {
+  const now = Date.now();
+  for (const [k, exp] of spentPowTokens.entries()) {
+    if (now > exp) {
+      spentPowTokens.delete(k);
+    }
+  }
+  return spentPowTokens.has(token);
+}
+
+function markTokenSpent(token: string, expiresAtEpochMs: number): void {
+  spentPowTokens.set(token, expiresAtEpochMs);
+}
+
 export const postSecurityGateMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const rawBody: unknown = await c.req.json().catch(() => null);
   if (rawBody === null) {
@@ -154,6 +171,9 @@ export const postSecurityGateMiddleware: MiddlewareHandler<AppEnv> = async (c, n
     powNonceHeader: c.req.header("X-Mol-Pow-Nonce"),
     hmacSecret: resolveHmacSecret(c.env),
     nowEpochMs: resolveNowMs(c.env),
+    minDifficultyBits: DEFAULT_POW_DIFFICULTY_BITS,
+    isTokenSpent,
+    markTokenSpent,
   });
 
   switch (gate.kind) {
@@ -195,6 +215,9 @@ export const reviewSecurityGateMiddleware: MiddlewareHandler<AppEnv> = async (c,
     powNonceHeader: c.req.header("X-Mol-Pow-Nonce"),
     hmacSecret: resolveHmacSecret(c.env),
     nowEpochMs: resolveNowMs(c.env),
+    minDifficultyBits: DEFAULT_POW_DIFFICULTY_BITS,
+    isTokenSpent,
+    markTokenSpent,
   });
 
   switch (gate.kind) {
@@ -301,7 +324,7 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
                 </p>
               </div>
               <form method="post" action={`/api/v1/posts/${post.id}/approve`}>
-                <input type="hidden" name="owner_id" value={author.ownerId} />
+                <input type="hidden" name="owner_id" value={props.details.authorOwnerId} />
                 <button
                   type="submit"
                   class="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition shrink-0"
@@ -326,7 +349,7 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
                       PRO
                     </span>
                   ) : null}
-                  {author.sponsorUrl ? (
+                  {author.sponsorUrl && author.sponsorUrl.startsWith("https://") ? (
                     <a
                       href={author.sponsorUrl}
                       target="_blank"
@@ -502,7 +525,12 @@ const registerAgentSchema = z.object({
   model_name: z.string().min(2).max(100),
   system_prompt_summary: z.string().max(1000).optional(),
   owner_id: z.string().min(3).max(64).optional(),
-  sponsor_url: z.string().url().max(300).optional(),
+  sponsor_url: z
+    .string()
+    .url()
+    .max(300)
+    .regex(/^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/.*)?$/, "Must be an https URL")
+    .optional(),
 });
 
 const trustAgentSchema = z.object({
@@ -643,12 +671,16 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
         ? (caches as unknown as { default: Cache }).default
         : undefined;
     const cacheKeyUrl = new URL(c.req.url);
-    cacheKeyUrl.searchParams.set("__cv", "v2");
+    cacheKeyUrl.searchParams.set("__cv", "v3");
     cacheKeyUrl.searchParams.set("__accept_variant", formatVariant);
     const cacheKey = new Request(cacheKeyUrl.toString(), { method: "GET" });
 
-    // Evict old unversioned cache entries
+    // Evict old cache entries
     if (cacheStorage) {
+      const v2Url = new URL(c.req.url);
+      v2Url.searchParams.set("__cv", "v2");
+      v2Url.searchParams.set("__accept_variant", formatVariant);
+      await cacheStorage.delete(new Request(v2Url.toString(), { method: "GET" })).catch(() => {});
       const oldUrl = new URL(c.req.url);
       oldUrl.searchParams.set("__accept_variant", formatVariant);
       await cacheStorage.delete(new Request(oldUrl.toString(), { method: "GET" })).catch(() => {});
@@ -669,7 +701,7 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
     }
 
     const isQuarantined = details.post.status === "quarantined";
-    if (isQuarantined && details.author.ownerId !== ownerIdParam) {
+    if (isQuarantined && details.authorOwnerId !== ownerIdParam) {
       return c.json({ error: "post_not_found_or_quarantined" }, 404);
     }
 
@@ -743,12 +775,40 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
       const rawApiKey = `mol_sec_${generateId("key")}`;
       const keyHash = await sha256Hex(rawApiKey);
       const agentId = parseAgentId(generateId("agent"));
-      const ownerId = parseOwnerId(body.owner_id ?? generateId("owner"));
+      const requestedOwnerId = body.owner_id ? parseOwnerId(body.owner_id) : null;
+      const ownerId = requestedOwnerId ?? parseOwnerId(generateId("owner"));
       if (!agentId || !ownerId) {
         return c.json({ error: "id_generation_error" }, 500);
       }
 
       const db = resolveDb(c.env);
+
+      if (requestedOwnerId) {
+        const existingAgents = await db
+          .select({ id: schema.agents.id })
+          .from(schema.agents)
+          .where(eq(schema.agents.ownerId, requestedOwnerId))
+          .limit(1);
+
+        if (existingAgents.length > 0) {
+          const authHeader = c.req.header("Authorization");
+          const rawKey = authHeader?.startsWith("Bearer ")
+            ? authHeader.slice("Bearer ".length).trim()
+            : null;
+          const callerAgent = rawKey ? await findAgentByApiKey(db, rawKey) : null;
+          if (!callerAgent || callerAgent.ownerId !== requestedOwnerId) {
+            return c.json(
+              {
+                error: "forbidden",
+                message:
+                  "Claiming an existing owner_id requires authorization from an agent belonging to that owner",
+              },
+              403,
+            );
+          }
+        }
+      }
+
       const nowIso = brandIsoTimestamp(new Date(resolveNowMs(c.env)).toISOString());
 
       const created = await createAgent(db, {

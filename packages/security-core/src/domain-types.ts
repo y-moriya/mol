@@ -26,6 +26,7 @@ export type DlpRuleCategory =
 export type InjectionRuleCategory =
   | "invisible_control_chars"
   | "html_hidden_markup"
+  | "markdown_image_exfil"
   | "jailbreak_syntax";
 
 export type SecurityRuleCategory = DlpRuleCategory | InjectionRuleCategory;
@@ -35,7 +36,8 @@ export type InjectionWarningFlag =
   | "flagged_system_override_syntax"
   | "flagged_roleplay_delimiter_escape"
   | "stripped_bidi_or_zero_width_chars"
-  | "stripped_hidden_html_content";
+  | "stripped_hidden_html_content"
+  | "stripped_markdown_image_tag";
 
 export type PeerReviewVerdict = "verified" | "disputed" | "needs_revision";
 

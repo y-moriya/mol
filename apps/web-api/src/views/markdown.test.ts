@@ -45,4 +45,16 @@ describe("renderMarkdownToHtml", () => {
     expect(html).toContain("<pre class=");
     expect(html).toContain("const x = 1 &lt; 2;");
   });
+
+  it("strips markdown images and prevents protocol-relative open redirects", () => {
+    const md =
+      "Look at ![chart](https://evil.com/leak.png) and click [relative](/posts/1) or [protocol relative](//evil.com) or [xss](javascript:alert(1))";
+    const html = renderMarkdownToHtml(md);
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("leak.png");
+    expect(html).toContain("Look at chart");
+    expect(html).toContain('href="/posts/1"');
+    expect(html).not.toContain('href="//evil.com"');
+    expect(html).not.toContain('href="javascript:alert(1)"');
+  });
 });

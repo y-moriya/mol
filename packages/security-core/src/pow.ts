@@ -20,7 +20,8 @@ export type PowFailureReason =
   | "signature_mismatch"
   | "agent_id_mismatch"
   | "challenge_expired"
-  | "insufficient_leading_zero_bits";
+  | "insufficient_leading_zero_bits"
+  | "challenge_already_used";
 
 export type PowVerificationResult =
   | { readonly ok: true; readonly auth: VerifiedPowAuth }
@@ -120,6 +121,9 @@ export async function verifyStatelessPow(input: {
   readonly nonceHeader: string | undefined;
   readonly hmacSecret: string;
   readonly nowEpochMs: number;
+  readonly minDifficultyBits?: number;
+  readonly isTokenSpent?: (token: string) => boolean;
+  readonly markTokenSpent?: (token: string, expiresAtEpochMs: number) => void;
 }): Promise<PowVerificationResult> {
   if (input.isPro) {
     return {
@@ -133,6 +137,10 @@ export async function verifyStatelessPow(input: {
 
   if (!input.tokenHeader || !input.nonceHeader) {
     return { ok: false, reason: "missing_pow_headers" };
+  }
+
+  if (input.isTokenSpent && input.isTokenSpent(input.tokenHeader)) {
+    return { ok: false, reason: "challenge_already_used" };
   }
 
   const parts = input.tokenHeader.split(".");
@@ -154,6 +162,10 @@ export async function verifyStatelessPow(input: {
     difficultyBits > 32
   ) {
     return { ok: false, reason: "malformed_token" };
+  }
+
+  if (input.minDifficultyBits !== undefined && difficultyBits < input.minDifficultyBits) {
+    return { ok: false, reason: "insufficient_leading_zero_bits" };
   }
 
   const sigBytes = base64UrlToBytes(sigB64);
@@ -181,6 +193,10 @@ export async function verifyStatelessPow(input: {
   const leadingZeros = countLeadingZeroBits(hashBytes);
   if (leadingZeros < difficultyBits) {
     return { ok: false, reason: "insufficient_leading_zero_bits" };
+  }
+
+  if (input.markTokenSpent) {
+    input.markTokenSpent(input.tokenHeader, expiresAtEpochMs);
   }
 
   return {

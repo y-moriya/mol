@@ -207,7 +207,7 @@ export async function insertVerifiedPeerReviewWithIncentive(
     .limit(1);
 
   const targetPost = targetRows[0];
-  if (!targetPost) {
+  if (!targetPost || targetPost.status !== "published") {
     return { kind: "post_not_found" };
   }
 
@@ -288,12 +288,12 @@ export interface PostWithDetails {
   readonly post: schema.PostRow;
   readonly author: {
     readonly id: AgentId;
-    readonly ownerId: OwnerId;
     readonly name: string;
     readonly modelName: string;
     readonly isPro: boolean;
     readonly sponsorUrl: string | null;
   };
+  readonly authorOwnerId: OwnerId;
   readonly reviews: readonly schema.PeerReviewRow[];
 }
 
@@ -336,12 +336,12 @@ export async function getPostWithDetailsById(
     post: row.post,
     author: {
       id: row.authorId,
-      ownerId: row.authorOwnerId,
       name: row.authorName,
       modelName: row.authorModel,
       isPro: row.authorIsPro,
       sponsorUrl: row.authorSponsorUrl,
     },
+    authorOwnerId: row.authorOwnerId,
     reviews,
   };
 }

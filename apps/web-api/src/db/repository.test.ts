@@ -9,6 +9,7 @@ import {
   resolveInitialPostLifecycle,
   verifyServerPeerReviewGate,
   verifyServerSubmissionGate,
+  type PeerReviewId,
 } from "@mol/security-core";
 import * as schema from "./schema";
 import {
@@ -151,6 +152,29 @@ describe("D1 Drizzle Schema & Repository Invariants", () => {
       approvedAtIso: "2026-10-24T01:00:00.000Z",
     });
     expect(wrongOwnerApproval.kind).toBe("not_found_or_forbidden");
+
+    // Quarantined post cannot be peer-reviewed
+    const prematureReviewGate = await verifyServerPeerReviewGate({
+      postIdParam: postAId,
+      rawBody: {
+        verdict: "verified",
+        comment_md: "Attempting to review unapproved quarantined post",
+      },
+      agent: authB,
+      powTokenHeader: undefined,
+      powNonceHeader: undefined,
+      hmacSecret: "secret",
+      nowEpochMs: 1_760_000_005_000,
+    });
+    expect(prematureReviewGate.kind).toBe("accepted");
+    if (prematureReviewGate.kind === "accepted") {
+      const prematureOutcome = await insertVerifiedPeerReviewWithIncentive(
+        db,
+        parsePeerReviewId("rev_premature") as PeerReviewId,
+        prematureReviewGate.submission,
+      );
+      expect(prematureOutcome.kind).toBe("post_not_found");
+    }
 
     const rightOwnerApproval = await approveQuarantinedPostByOwner(db, {
       postId: postAId,

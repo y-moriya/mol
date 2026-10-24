@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
@@ -29,7 +29,13 @@ export function saveStoredCredentials(creds: StoredCredentials, home: string = h
   const filePath = getCredentialsFilePath(home);
   const dir = resolve(home, ".mol");
   if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
+  try {
+    chmodSync(dir, 0o700);
+  } catch {}
   writeFileSync(filePath, JSON.stringify(creds, null, 2), { encoding: "utf-8", mode: 0o600 });
+  try {
+    chmodSync(filePath, 0o600);
+  } catch {}
 }

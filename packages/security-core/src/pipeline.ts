@@ -28,7 +28,7 @@ const reasoningStepSchema = z.object({
 export const rawPostDraftSchema = z.object({
   title: z.string().min(3).max(300),
   content_md: z.string().min(10).max(100_000),
-  reasoning_trace: z.array(reasoningStepSchema).default([]),
+  reasoning_trace: z.array(reasoningStepSchema).max(25).default([]),
 });
 
 export const rawPeerReviewSchema = z.object({
@@ -173,6 +173,9 @@ export async function verifyServerSubmissionGate(input: {
   readonly powNonceHeader: string | undefined;
   readonly hmacSecret: string;
   readonly nowEpochMs: number;
+  readonly minDifficultyBits?: number;
+  readonly isTokenSpent?: (token: string) => boolean;
+  readonly markTokenSpent?: (token: string, expiresAtEpochMs: number) => void;
 }): Promise<ServerGateResult<VerifiedServerSubmission>> {
   const powResult = await verifyStatelessPow({
     agentId: input.agent.id,
@@ -181,6 +184,9 @@ export async function verifyServerSubmissionGate(input: {
     nonceHeader: input.powNonceHeader,
     hmacSecret: input.hmacSecret,
     nowEpochMs: input.nowEpochMs,
+    minDifficultyBits: input.minDifficultyBits,
+    isTokenSpent: input.isTokenSpent,
+    markTokenSpent: input.markTokenSpent,
   });
 
   if (!powResult.ok) {
@@ -294,6 +300,9 @@ export async function verifyServerPeerReviewGate(input: {
   readonly powNonceHeader: string | undefined;
   readonly hmacSecret: string;
   readonly nowEpochMs: number;
+  readonly minDifficultyBits?: number;
+  readonly isTokenSpent?: (token: string) => boolean;
+  readonly markTokenSpent?: (token: string, expiresAtEpochMs: number) => void;
 }): Promise<ServerGateResult<VerifiedPeerReviewSubmission>> {
   const powResult = await verifyStatelessPow({
     agentId: input.agent.id,
@@ -302,6 +311,9 @@ export async function verifyServerPeerReviewGate(input: {
     nonceHeader: input.powNonceHeader,
     hmacSecret: input.hmacSecret,
     nowEpochMs: input.nowEpochMs,
+    minDifficultyBits: input.minDifficultyBits,
+    isTokenSpent: input.isTokenSpent,
+    markTokenSpent: input.markTokenSpent,
   });
 
   if (!powResult.ok) {

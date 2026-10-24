@@ -21,7 +21,7 @@ export type SecurityRuleEntry =
   | {
       readonly id: string;
       readonly phase: "injection_sanitize";
-      readonly category: "invisible_control_chars" | "html_hidden_markup";
+      readonly category: "invisible_control_chars" | "html_hidden_markup" | "markdown_image_exfil";
       readonly description: string;
       readonly detect: SpanDetector;
       readonly preserveCodeSpans: boolean;
@@ -40,7 +40,10 @@ export type SecurityRuleEntry =
       readonly serverMode: "attach_warning";
     };
 
-export function detectRegexReplacement(pattern: RegExp, replacement: string): SpanDetector {
+export function detectRegexReplacement(
+  pattern: RegExp,
+  replacement: string | ((match: RegExpExecArray) => string),
+): SpanDetector {
   return (input: string): readonly RuleMatchSpan[] => {
     const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
     const re = new RegExp(pattern.source, flags);
@@ -49,10 +52,11 @@ export function detectRegexReplacement(pattern: RegExp, replacement: string): Sp
     while (match !== null) {
       const matchedText = match[0];
       if (matchedText.length > 0) {
+        const rep = typeof replacement === "function" ? replacement(match) : replacement;
         spans.push({
           start: match.index,
           end: match.index + matchedText.length,
-          replacement,
+          replacement: rep,
         });
       } else {
         re.lastIndex += 1;
@@ -111,7 +115,6 @@ export function detectHighEntropyTokens(options: {
       if (
         token.length >= options.minLength &&
         !token.startsWith("REDACTED") &&
-        !token.includes("__") &&
         hasMixedCharacterClasses(token)
       ) {
         const entropy = computeShannonEntropy(token);
@@ -132,7 +135,8 @@ export function detectHighEntropyTokens(options: {
 }
 
 export function detectLocalFilesystemPaths(): SpanDetector {
-  const unixPathRe = /(?:^|(?<=[\s"'`(=:]))(\/(?:Users|home)\/[A-Za-z0-9._-]+)(\/[^\s"'`)\]]*)?/g;
+  const unixPathRe =
+    /(?:^|(?<=[\s"'`(=:]))(\/(?:Users|home)\/[A-Za-z0-9._-]+|\/root)(\/[^\s"'`)\]]*)?/g;
   const winPathRe = /(?:^|(?<=[\s"'`(=:]))([A-Za-z]:\\Users\\[A-Za-z0-9._-]+)(\\[^\s"'`)\]]*)?/g;
 
   return (input: string): readonly RuleMatchSpan[] => {
@@ -192,7 +196,11 @@ export function detectPrivateIpv4Ranges(): SpanDetector {
         o4 <= 255;
       if (validOctets) {
         const isPrivate =
-          o1 === 10 || (o1 === 172 && o2 >= 16 && o2 <= 31) || (o1 === 192 && o2 === 168);
+          o1 === 10 ||
+          o1 === 127 ||
+          (o1 === 172 && o2 >= 16 && o2 <= 31) ||
+          (o1 === 192 && o2 === 168) ||
+          (o1 === 169 && o2 === 254);
         if (isPrivate) {
           spans.push({
             start: match.index,
@@ -240,9 +248,10 @@ export const SECURITY_RULE_TABLE: readonly SecurityRuleEntry[] = [
     id: "dlp.cloud_api_key",
     phase: "dlp",
     category: "cloud_api_key",
-    description: "Cloud and API keys (sk-..., ghp_..., AKIA..., AIza..., xoxb-...)",
+    description:
+      "Cloud and API keys (sk-..., sk_live_..., ghp_..., AKIA..., ASIA..., hf_..., glpat-..., AIza..., xoxb-...)",
     detect: detectRegexReplacement(
-      /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|xox[baprs]-[0-9A-Za-z-]{10,})\b/g,
+      /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{16,}|sk_(?:live|test)_[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|hf_[A-Za-z0-9]{30,}|(?:AKIA|ASIA)[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|xox[baprs]-[0-9A-Za-z-]{10,})\b/g,
       "[REDACTED]",
     ),
     clientMode: "redact_span",
@@ -266,7 +275,7 @@ export const SECURITY_RULE_TABLE: readonly SecurityRuleEntry[] = [
     category: "pem_private_key",
     description: "PEM private key blocks",
     detect: detectRegexReplacement(
-      /-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/g,
+      /-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/gi,
       "[REDACTED]",
     ),
     clientMode: "redact_span",
@@ -278,7 +287,7 @@ export const SECURITY_RULE_TABLE: readonly SecurityRuleEntry[] = [
     category: "dotenv_assignment",
     description: ".env KEY=VALUE secret assignment lines",
     detect: detectRegexReplacement(
-      /^(?:export\s+)?[A-Z][A-Z0-9_]*_(?:KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|AUTH|DSN|URL|URI|PRIVATE)\s*=\s*(?:["'][^"'\n]+["']|[^\s#\n]+)$/gm,
+      /^(?:export\s+)?[A-Za-z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|AUTH|DSN|URL|URI|PRIVATE)\s*=\s*(?:["'][^"'\n]+["']|[^\s#\n]+)$/gim,
       "[REDACTED]",
     ),
     clientMode: "redact_span",
@@ -347,6 +356,20 @@ export const SECURITY_RULE_TABLE: readonly SecurityRuleEntry[] = [
     ),
     preserveCodeSpans: true,
     warningOnMatch: "stripped_hidden_html_content",
+    clientMode: "strip_span",
+    serverMode: "strip_span",
+  },
+  {
+    id: "injection.markdown_image_exfil",
+    phase: "injection_sanitize",
+    category: "markdown_image_exfil",
+    description: "Markdown image tags that could exfiltrate data via automatic image loading",
+    detect: detectRegexReplacement(
+      /!\[([^\]]*)\]\((?:https?:\/\/[^\s)]+|\/[^\s)]*)\)/g,
+      (m) => m[1] ?? "",
+    ),
+    preserveCodeSpans: true,
+    warningOnMatch: "stripped_markdown_image_tag",
     clientMode: "strip_span",
     serverMode: "strip_span",
   },

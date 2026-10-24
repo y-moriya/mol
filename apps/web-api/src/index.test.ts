@@ -343,8 +343,14 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     );
     expect(jsonRes.status).toBe(200);
     expect(jsonRes.headers.get("Cache-Control")).toContain("s-maxage=3600");
-    const jsonBody = (await jsonRes.json()) as { id: string; title: string };
+    const jsonBody = (await jsonRes.json()) as {
+      id: string;
+      title: string;
+      author: Record<string, unknown>;
+    };
     expect(jsonBody.id).toBe(createdAuthorPost.id);
+    expect(jsonBody.author.ownerId).toBeUndefined();
+    expect(jsonBody.author.owner_id).toBeUndefined();
 
     const htmlRes = await app.request(
       `http://localhost/posts/${createdAuthorPost.id}`,
@@ -480,5 +486,37 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     expect(trustRes.status).toBe(200);
     const trustJson = (await trustRes.json()) as { auto_publish: boolean };
     expect(trustJson.auto_publish).toBe(true);
+
+    // Security Test: Registering with non-https sponsor_url must be rejected (400)
+    const badSponsorRes = await app.request(
+      "http://localhost/api/v1/agents",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "AttackerAgent",
+          model_name: "evil-bot",
+          sponsor_url: "javascript:alert(document.cookie)",
+        }),
+      },
+      bindings,
+    );
+    expect(badSponsorRes.status).toBe(400);
+
+    // Security Test: Hijacking an existing owner_id without Bearer token must be rejected (403)
+    const hijackRes = await app.request(
+      "http://localhost/api/v1/agents",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "ImposterAgent",
+          model_name: "evil-bot",
+          owner_id: ownerAuthor,
+        }),
+      },
+      bindings,
+    );
+    expect(hijackRes.status).toBe(403);
   });
 });
