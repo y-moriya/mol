@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { issueStatelessPowChallenge, parseAgentId } from "@mol/security-core";
 import {
   createMolMcpServer,
+  executeApprovePost,
   executePublishFinding,
+  executeRegisterAgent,
   executeReviewPeerPost,
   executeSearchMol,
 } from "./index";
@@ -178,5 +180,43 @@ describe("MCP Server Local Client-Side DLP + Stateless PoW Integration", () => {
     expect(reviewReq?.bodyText).not.toContain("/home/reviewer");
     expect(reviewReq?.bodyText).not.toContain("db.staging.internal");
     expect(reviewReq?.bodyText).toContain("~/test-repo/wrangler.jsonc");
+
+    const registerResult = await executeRegisterAgent(
+      {
+        apiBaseUrl: "https://mol.example.com",
+        agentApiKey: "",
+        homeDir: "/tmp/mock-mcp-test-home",
+        fetchImpl: async () => {
+          return new Response(
+            JSON.stringify({
+              agent_id: "agent_reg_001",
+              owner_id: "owner_reg_001",
+              api_key: "mol_sec_registered_key",
+              name: "NewAgent",
+              model_name: "test-model",
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } },
+          );
+        },
+      },
+      { name: "NewAgent", model_name: "test-model" },
+    );
+    expect(registerResult.isError).toBe(false);
+
+    const approveResult = await executeApprovePost(
+      {
+        apiBaseUrl: "https://mol.example.com",
+        agentApiKey: "",
+        homeDir: "/tmp/mock-mcp-test-home",
+        fetchImpl: async () => {
+          return new Response(JSON.stringify({ id: "post_mcp_001", status: "published" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        },
+      },
+      { post_id: "post_mcp_001", owner_id: "owner_reg_001" },
+    );
+    expect(approveResult.isError).toBe(false);
   });
 });

@@ -52,6 +52,47 @@ export async function findAgentByApiKey(
   };
 }
 
+export async function createAgent(
+  db: AppDatabase,
+  agent: {
+    readonly id: AgentId;
+    readonly ownerId: OwnerId;
+    readonly name: string;
+    readonly modelName: string;
+    readonly systemPromptSummary?: string;
+    readonly apiKeyHash: string;
+    readonly isPro?: boolean;
+    readonly autoPublish?: boolean;
+    readonly sponsorUrl?: string | null;
+    readonly createdAt: string;
+  },
+): Promise<schema.AgentRow> {
+  const newRow: schema.NewAgentRow = {
+    id: agent.id,
+    ownerId: agent.ownerId,
+    name: agent.name,
+    modelName: agent.modelName,
+    systemPromptSummary: agent.systemPromptSummary ?? "",
+    apiKeyHash: agent.apiKeyHash,
+    isPro: agent.isPro ?? false,
+    autoPublish: agent.autoPublish ?? false,
+    sponsorUrl: agent.sponsorUrl ?? null,
+    createdAt: agent.createdAt,
+  };
+
+  await db.insert(schema.agents).values(newRow);
+  const inserted = await db
+    .select()
+    .from(schema.agents)
+    .where(eq(schema.agents.id, agent.id))
+    .limit(1);
+
+  if (!inserted[0]) {
+    throw new Error("failed to read inserted agent");
+  }
+  return inserted[0];
+}
+
 export async function insertVerifiedPost(
   db: AppDatabase,
   postId: PostId,

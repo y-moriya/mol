@@ -3,7 +3,9 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { drizzle } from "drizzle-orm/d1";
 import {
+  brandIsoTimestamp,
   issueStatelessPowChallenge,
+  parseAgentId,
   parseOwnerId,
   parsePeerReviewId,
   parsePostId,
@@ -19,11 +21,13 @@ import {
 import * as schema from "./db/schema";
 import {
   approveQuarantinedPostByOwner,
+  createAgent,
   findAgentByApiKey,
   getPostWithDetailsById,
   insertVerifiedPeerReviewWithIncentive,
   insertVerifiedPost,
   listPublishedPosts,
+  sha256Hex,
   type AppDatabase,
   type PostWithDetails,
 } from "./db/repository";
@@ -379,6 +383,14 @@ const approveBodySchema = z.object({
   owner_id: z.string().min(3).max(64),
 });
 
+const registerAgentSchema = z.object({
+  name: z.string().min(2).max(100),
+  model_name: z.string().min(2).max(100),
+  system_prompt_summary: z.string().max(1000).optional(),
+  owner_id: z.string().min(3).max(64).optional(),
+  sponsor_url: z.string().url().max(300).optional(),
+});
+
 export function createApp() {
   const app = new Hono<AppEnv>();
 
@@ -560,6 +572,47 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
     }
 
     return response;
+  });
+
+  app.post("/api/v1/agents", zValidator("json", registerAgentSchema), async (c) => {
+    const body = c.req.valid("json");
+    const rawApiKey = `mol_sec_${generateId("key")}`;
+    const keyHash = await sha256Hex(rawApiKey);
+    const agentId = parseAgentId(generateId("agent"));
+    const ownerId = parseOwnerId(body.owner_id ?? generateId("owner"));
+    if (!agentId || !ownerId) {
+      return c.json({ error: "id_generation_error" }, 500);
+    }
+
+    const db = resolveDb(c.env);
+    const nowIso = brandIsoTimestamp(new Date(resolveNowMs(c.env)).toISOString());
+
+    const created = await createAgent(db, {
+      id: agentId,
+      ownerId,
+      name: body.name,
+      modelName: body.model_name,
+      systemPromptSummary: body.system_prompt_summary ?? "",
+      apiKeyHash: keyHash,
+      isPro: false,
+      autoPublish: false,
+      sponsorUrl: body.sponsor_url ?? null,
+      createdAt: nowIso,
+    });
+
+    return c.json(
+      {
+        agent_id: created.id,
+        owner_id: created.ownerId,
+        name: created.name,
+        model_name: created.modelName,
+        api_key: rawApiKey,
+        auto_publish: created.autoPublish,
+        is_pro: created.isPro,
+        created_at: created.createdAt,
+      },
+      201,
+    );
   });
 
   app.get("/api/v1/pow/challenge", requireAgentAuthMiddleware, async (c) => {

@@ -172,6 +172,39 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     expect(rowCount.cnt).toBe(0);
   });
 
+  it("registers a new agent identity and returns credentials with auto_publish disabled by default", async () => {
+    const { bindings } = createTestEnvironment();
+    const app = createApp();
+
+    const res = await app.request(
+      "http://localhost/api/v1/agents",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Antigravity Agent",
+          model_name: "gemini-2.5-flash-thinking",
+          system_prompt_summary: "Pair programmer agent",
+        }),
+      },
+      bindings,
+    );
+
+    expect(res.status).toBe(201);
+    const data = (await res.json()) as {
+      agent_id: string;
+      owner_id: string;
+      api_key: string;
+      auto_publish: boolean;
+      name: string;
+    };
+    expect(data.agent_id).toMatch(/^agent_/);
+    expect(data.owner_id).toMatch(/^owner_/);
+    expect(data.api_key).toMatch(/^mol_sec_/);
+    expect(data.auto_publish).toBe(false);
+    expect(data.name).toBe("Antigravity Agent");
+  });
+
   it("quarantines posts by default, publishes after owner approval, serves HTML/Markdown/JSON with s-maxage=3600, indexes embeddings in Vectorize, and boosts reviewer exposure on review", async () => {
     const { db, bindings, storedVectors } = createTestEnvironment();
     const app = createApp();

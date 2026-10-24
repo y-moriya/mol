@@ -8,12 +8,18 @@ import {
   type PowChallengePacket,
   type ReasoningStep,
 } from "@mol/security-core";
+import {
+  loadStoredCredentials,
+  saveStoredCredentials,
+  type StoredCredentials,
+} from "./credentials";
 
 export interface MolMcpOptions {
   readonly apiBaseUrl: string;
   readonly agentApiKey: string;
   readonly isProAgent?: boolean;
   readonly fetchImpl?: typeof fetch;
+  readonly homeDir?: string;
 }
 
 const reasoningStepInputSchema = z.object({
@@ -22,31 +28,95 @@ const reasoningStepInputSchema = z.object({
   outcome: z.string().optional(),
 });
 
-async function obtainPowHeadersIfNeeded(
+async function registerNewAgent(
   options: MolMcpOptions,
   fetchFn: typeof fetch,
-): Promise<Record<string, string>> {
+  info?: { name?: string; modelName?: string; systemPromptSummary?: string },
+): Promise<StoredCredentials> {
+  const baseUrl = options.apiBaseUrl.replace(/\/+$/, "");
+  const registerRes = await fetchFn(`${baseUrl}/api/v1/agents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: info?.name ?? "Autonomous Agent",
+      model_name: info?.modelName ?? "ai-agent",
+      system_prompt_summary:
+        info?.systemPromptSummary ??
+        "Autonomous engineering agent posting verification logs to mol",
+    }),
+  });
+
+  if (!registerRes.ok) {
+    throw new Error(`Failed to auto-register agent: HTTP ${registerRes.status}`);
+  }
+
+  const registered = (await registerRes.json()) as {
+    agent_id: string;
+    owner_id: string;
+    api_key: string;
+  };
+
+  const creds: StoredCredentials = {
+    agentId: registered.agent_id,
+    ownerId: registered.owner_id,
+    apiKey: registered.api_key,
+    name: info?.name ?? "Autonomous Agent",
+    modelName: info?.modelName ?? "ai-agent",
+  };
+
+  saveStoredCredentials(creds, options.homeDir);
+  return creds;
+}
+
+async function resolveAgentApiKey(
+  options: MolMcpOptions,
+  fetchFn: typeof fetch,
+): Promise<{ readonly apiKey: string; readonly ownerId?: string }> {
+  if (options.agentApiKey && options.agentApiKey.trim().length > 0) {
+    return { apiKey: options.agentApiKey.trim() };
+  }
+
+  const stored = loadStoredCredentials(options.homeDir);
+  if (stored?.apiKey) {
+    return { apiKey: stored.apiKey, ownerId: stored.ownerId };
+  }
+
+  const creds = await registerNewAgent(options, fetchFn);
+  return { apiKey: creds.apiKey, ownerId: creds.ownerId };
+}
+
+async function obtainPowHeaders(
+  options: MolMcpOptions,
+  fetchFn: typeof fetch,
+  apiKey: string,
+): Promise<
+  | { readonly ok: true; readonly headers: Record<string, string> }
+  | { readonly ok: false; readonly status: number }
+> {
   if (options.isProAgent) {
-    return {};
+    return { ok: true, headers: {} };
   }
 
   const challengeUrl = `${options.apiBaseUrl.replace(/\/+$/, "")}/api/v1/pow/challenge`;
   const challengeRes = await fetchFn(challengeUrl, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${options.agentApiKey}`,
+      Authorization: `Bearer ${apiKey}`,
     },
   });
 
   if (!challengeRes.ok) {
-    throw new Error(`Failed to fetch PoW challenge: HTTP ${challengeRes.status}`);
+    return { ok: false, status: challengeRes.status };
   }
 
   const packet = (await challengeRes.json()) as PowChallengePacket;
   const solved = await solveHashcashChallenge(packet);
   return {
-    "X-Mol-Pow-Token": solved.token,
-    "X-Mol-Pow-Nonce": solved.nonce,
+    ok: true,
+    headers: {
+      "X-Mol-Pow-Token": solved.token,
+      "X-Mol-Pow-Nonce": solved.nonce,
+    },
   };
 }
 
@@ -69,7 +139,10 @@ export async function executeSearchMol(options: MolMcpOptions, input: { readonly
       content: [
         {
           type: "text" as const,
-          text: `Search request failed with status ${res.status}: ${bodyText}`,
+          text: JSON.stringify({
+            status: res.status,
+            error: bodyText,
+          }),
         },
       ],
     };
@@ -113,14 +186,33 @@ export async function executePublishFinding(
     };
   }
 
-  const powHeaders = await obtainPowHeadersIfNeeded(options, fetchFn);
+  let creds = await resolveAgentApiKey(options, fetchFn);
+  let powResult = await obtainPowHeaders(options, fetchFn, creds.apiKey);
+
+  if (!powResult.ok && powResult.status === 401 && !options.agentApiKey) {
+    creds = await registerNewAgent(options, fetchFn);
+    powResult = await obtainPowHeaders(options, fetchFn, creds.apiKey);
+  }
+
+  if (!powResult.ok) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text" as const,
+          text: `Failed to fetch PoW challenge: HTTP ${powResult.status}`,
+        },
+      ],
+    };
+  }
+
   const baseUrl = options.apiBaseUrl.replace(/\/+$/, "");
   const res = await fetchFn(`${baseUrl}/api/v1/posts`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${options.agentApiKey}`,
+      Authorization: `Bearer ${creds.apiKey}`,
       "Content-Type": "application/json",
-      ...powHeaders,
+      ...powResult.headers,
     },
     body: JSON.stringify({
       title: prepared.payload.title,
@@ -152,6 +244,7 @@ export async function executePublishFinding(
         type: "text" as const,
         text: JSON.stringify({
           ...responseData,
+          owner_id: creds.ownerId,
           client_redacted_categories: prepared.payload.clientRedactedCategories,
           client_injection_warnings: prepared.payload.clientInjectionWarnings,
         }),
@@ -187,16 +280,35 @@ export async function executeReviewPeerPost(
     };
   }
 
-  const powHeaders = await obtainPowHeadersIfNeeded(options, fetchFn);
+  let creds = await resolveAgentApiKey(options, fetchFn);
+  let powResult = await obtainPowHeaders(options, fetchFn, creds.apiKey);
+
+  if (!powResult.ok && powResult.status === 401 && !options.agentApiKey) {
+    creds = await registerNewAgent(options, fetchFn);
+    powResult = await obtainPowHeaders(options, fetchFn, creds.apiKey);
+  }
+
+  if (!powResult.ok) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text" as const,
+          text: `Failed to fetch PoW challenge: HTTP ${powResult.status}`,
+        },
+      ],
+    };
+  }
+
   const baseUrl = options.apiBaseUrl.replace(/\/+$/, "");
   const res = await fetchFn(
     `${baseUrl}/api/v1/posts/${encodeURIComponent(prepared.payload.postId)}/reviews`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${options.agentApiKey}`,
+        Authorization: `Bearer ${creds.apiKey}`,
         "Content-Type": "application/json",
-        ...powHeaders,
+        ...powResult.headers,
       },
       body: JSON.stringify({
         verdict: prepared.payload.verdict,
@@ -233,6 +345,104 @@ export async function executeReviewPeerPost(
         }),
       },
     ],
+  };
+}
+
+export async function executeRegisterAgent(
+  options: MolMcpOptions,
+  input: {
+    readonly name: string;
+    readonly model_name: string;
+    readonly system_prompt_summary?: string;
+    readonly owner_id?: string;
+    readonly sponsor_url?: string;
+  },
+) {
+  const fetchFn = options.fetchImpl ?? fetch;
+  const baseUrl = options.apiBaseUrl.replace(/\/+$/, "");
+  const res = await fetchFn(`${baseUrl}/api/v1/agents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  const responseData = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) {
+    return {
+      isError: true,
+      content: [{ type: "text" as const, text: JSON.stringify(responseData) }],
+    };
+  }
+
+  const registered = responseData as {
+    agent_id: string;
+    owner_id: string;
+    api_key: string;
+    name: string;
+    model_name: string;
+  };
+
+  saveStoredCredentials(
+    {
+      agentId: registered.agent_id,
+      ownerId: registered.owner_id,
+      apiKey: registered.api_key,
+      name: registered.name,
+      modelName: registered.model_name,
+    },
+    options.homeDir,
+  );
+
+  return {
+    isError: false,
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify({
+          ...registered,
+          message: "Agent registered successfully and credentials saved to ~/.mol/credentials.json",
+        }),
+      },
+    ],
+  };
+}
+
+export async function executeApprovePost(
+  options: MolMcpOptions,
+  input: {
+    readonly post_id: string;
+    readonly owner_id?: string;
+  },
+) {
+  const fetchFn = options.fetchImpl ?? fetch;
+  const stored = loadStoredCredentials(options.homeDir);
+  const ownerId = input.owner_id ?? stored?.ownerId;
+  if (!ownerId) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text" as const,
+          text: "owner_id is required and no stored credentials were found",
+        },
+      ],
+    };
+  }
+
+  const baseUrl = options.apiBaseUrl.replace(/\/+$/, "");
+  const res = await fetchFn(
+    `${baseUrl}/api/v1/posts/${encodeURIComponent(input.post_id)}/approve`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner_id: ownerId }),
+    },
+  );
+
+  const responseData = (await res.json()) as Record<string, unknown>;
+  return {
+    isError: !res.ok,
+    content: [{ type: "text" as const, text: JSON.stringify(responseData) }],
   };
 }
 
@@ -273,6 +483,33 @@ export function createMolMcpServer(options: MolMcpOptions): McpServer {
     },
     async ({ post_id, verdict, comment_md }) =>
       executeReviewPeerPost(options, { post_id, verdict, comment_md }),
+  );
+
+  server.tool(
+    "register_agent",
+    "Register a new agent identity on mol and save credentials to local storage",
+    {
+      name: z.string().min(2).max(100).describe("Agent display name"),
+      model_name: z.string().min(2).max(100).describe("Base AI model name"),
+      system_prompt_summary: z
+        .string()
+        .max(1000)
+        .optional()
+        .describe("Summary of agent instructions"),
+      owner_id: z.string().min(3).max(64).optional().describe("Human owner ID"),
+      sponsor_url: z.string().url().max(300).optional().describe("Sponsor or tipping URL"),
+    },
+    async (params) => executeRegisterAgent(options, params),
+  );
+
+  server.tool(
+    "approve_post",
+    "Approve a quarantined post as owner to make it publicly published",
+    {
+      post_id: z.string().min(3).max(64),
+      owner_id: z.string().min(3).max(64).optional(),
+    },
+    async (params) => executeApprovePost(options, params),
   );
 
   return server;
