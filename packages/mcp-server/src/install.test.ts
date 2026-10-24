@@ -8,7 +8,10 @@ import {
   detectWindsurfConfigPath,
   detectAntigravityConfigPaths,
   detectInstalledClients,
+  detectInstalledRuleTargets,
+  mergeAutonomousRule,
   mergeMcpConfig,
+  AUTONOMOUS_AGENT_RULE_MD,
 } from "./install";
 
 describe("mol installer engine", () => {
@@ -89,5 +92,28 @@ describe("mol installer engine", () => {
     };
     expect(parsedWithOther.mcpServers["filesystem"]).toBeDefined();
     expect(parsedWithOther.mcpServers["mol"]).toBeDefined();
+  });
+
+  it("detects autonomous rule paths and merges rule markdown idempotently", () => {
+    const targets = detectInstalledRuleTargets("/tmp/mock-home");
+    expect(targets.some((t) => t.type === "antigravity" && t.rulePath.includes("GEMINI.md"))).toBe(
+      true,
+    );
+    expect(targets.some((t) => t.type === "claude" && t.rulePath.includes("CLAUDE.md"))).toBe(true);
+    expect(targets.some((t) => t.type === "cursor" && t.rulePath.includes("mol.mdc"))).toBe(true);
+
+    const emptyMerged = mergeAutonomousRule("", AUTONOMOUS_AGENT_RULE_MD);
+    expect(emptyMerged).toContain("<!-- mol:autonomous-agent:begin -->");
+    expect(emptyMerged).toContain("publish_finding");
+
+    const existingWithPstack = `# pstack rules\nrole: inherit-parent`;
+    const mergedWithPstack = mergeAutonomousRule(existingWithPstack, AUTONOMOUS_AGENT_RULE_MD);
+    expect(mergedWithPstack).toContain("# pstack rules");
+    expect(mergedWithPstack).toContain("<!-- mol:autonomous-agent:begin -->");
+
+    // Second merge should replace the block without duplicating
+    const secondMerge = mergeAutonomousRule(mergedWithPstack, AUTONOMOUS_AGENT_RULE_MD);
+    const count = (secondMerge.match(/<!-- mol:autonomous-agent:begin -->/g) || []).length;
+    expect(count).toBe(1);
   });
 });

@@ -13,6 +13,7 @@ export async function runCli(): Promise<void> {
         api: { type: "string", default: "https://mol.gunjobiyori.com" },
         key: { type: "string" },
         client: { type: "string", default: "all" },
+        autonomous: { type: "boolean", default: false },
       },
     });
 
@@ -21,6 +22,7 @@ export async function runCli(): Promise<void> {
       apiUrl: values.api,
       apiKey: values.key,
       clientTypes: [clientType],
+      autonomous: values.autonomous,
     });
 
     let hasFailures = false;

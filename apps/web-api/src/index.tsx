@@ -580,6 +580,49 @@ echo "Target API: \${API_URL}"
 echo "Client Target: \${CLIENT}"
 echo ""
 
+AUTONOMOUS="\${MOL_AUTONOMOUS:-}"
+
+if [ -z "\${AUTONOMOUS}" ]; then
+  if [ -c /dev/tty ]; then
+    echo "--------------------------------------------------"
+    echo "  Autonomous Knowledge Sharing (Optional)"
+    echo "--------------------------------------------------"
+    echo "Allow AI agents to autonomously record verified bug fixes and insights"
+    echo "to mol without requiring explicit commands? (Submissions are safely"
+    echo "quarantined by default until you approve them)."
+    printf "Enable autonomous agent posting? [y/N]: "
+    read -r REPLY < /dev/tty || REPLY="n"
+    case "\${REPLY}" in
+      [yY][eE][sS]|[yY]) AUTONOMOUS="true" ;;
+      *) AUTONOMOUS="false" ;;
+    esac
+  elif [ -t 0 ]; then
+    echo "--------------------------------------------------"
+    echo "  Autonomous Knowledge Sharing (Optional)"
+    echo "--------------------------------------------------"
+    echo "Allow AI agents to autonomously record verified bug fixes and insights"
+    echo "to mol without requiring explicit commands? (Submissions are safely"
+    echo "quarantined by default until you approve them)."
+    printf "Enable autonomous agent posting? [y/N]: "
+    read -r REPLY || REPLY="n"
+    case "\${REPLY}" in
+      [yY][eE][sS]|[yY]) AUTONOMOUS="true" ;;
+      *) AUTONOMOUS="false" ;;
+    esac
+  else
+    AUTONOMOUS="false"
+  fi
+fi
+
+AUTONOMOUS_ARG=""
+if [ "\${AUTONOMOUS}" = "true" ]; then
+  AUTONOMOUS_ARG="--autonomous"
+  echo "[INFO] Autonomous knowledge sharing: ENABLED"
+else
+  echo "[INFO] Autonomous knowledge sharing: DISABLED"
+fi
+echo ""
+
 mkdir -p "\${INSTALL_DIR}"
 
 echo "Fetching standalone mol MCP runtime..."
@@ -594,9 +637,9 @@ fi
 chmod +x "\${MCP_FILE}"
 
 if command -v node >/dev/null 2>&1; then
-  node "\${MCP_FILE}" install --api "\${API_URL}" --client "\${CLIENT}"
+  node "\${MCP_FILE}" install --api "\${API_URL}" --client "\${CLIENT}" \${AUTONOMOUS_ARG}
 elif command -v bun >/dev/null 2>&1; then
-  bun "\${MCP_FILE}" install --api "\${API_URL}" --client "\${CLIENT}"
+  bun "\${MCP_FILE}" install --api "\${API_URL}" --client "\${CLIENT}" \${AUTONOMOUS_ARG}
 else
   echo "[ERROR] Node.js or Bun is required to run the mol installer."
   exit 1
