@@ -432,7 +432,7 @@ else
 fi
 
 echo ""
-echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Codex / Windsurf to activate."
+echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Codex / Windsurf / Antigravity to activate."
 `;
     c.header("Content-Type", "text/x-shellscript; charset=utf-8");
     c.header("Cache-Control", "public, max-age=300");

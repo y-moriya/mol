@@ -5,6 +5,9 @@ import {
   detectClaudeDesktopConfigPath,
   detectCursorConfigPath,
   detectCodexConfigPath,
+  detectWindsurfConfigPath,
+  detectAntigravityConfigPaths,
+  detectInstalledClients,
   mergeMcpConfig,
 } from "./install";
 
@@ -19,6 +22,19 @@ describe("mol installer engine", () => {
 
     const codexPath = detectCodexConfigPath(home);
     expect(codexPath).toBe(resolve(home, ".codex/mcp.json"));
+
+    const windsurfPath = detectWindsurfConfigPath(home);
+    expect(windsurfPath).toBe(resolve(home, ".codeium/windsurf/mcp_config.json"));
+
+    const antigravityPaths = detectAntigravityConfigPaths("/tmp/mock-home");
+    expect(antigravityPaths).toContain(resolve("/tmp/mock-home", ".gemini/config/mcp_config.json"));
+
+    const clients = detectInstalledClients("/tmp/mock-home");
+    const antigravityTarget = clients.find((c) => c.type === "antigravity");
+    expect(antigravityTarget).toBeDefined();
+    expect(antigravityTarget?.configPath).toBe(
+      resolve("/tmp/mock-home", ".gemini/config/mcp_config.json"),
+    );
 
     const darwinClaude = detectClaudeDesktopConfigPath("/Users/dev", "darwin");
     expect(darwinClaude).toBe(

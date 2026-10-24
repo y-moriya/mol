@@ -333,6 +333,7 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     expect(installShRes.headers.get("Content-Type")).toContain("text/x-shellscript");
     const installShText = await installShRes.text();
     expect(installShText).toContain("/mcp.mjs");
+    expect(installShText).toContain("Antigravity");
 
     const mcpMjsRes = await app.request("http://localhost/mcp.mjs", {}, bindings);
     expect(mcpMjsRes.status).toBe(200);

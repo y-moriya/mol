@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 
-export type AgentClientType = "claude" | "cursor" | "codex" | "windsurf" | "all";
+export type AgentClientType = "claude" | "cursor" | "codex" | "windsurf" | "antigravity" | "all";
 
 export interface McpServerConfigEntry {
   readonly serverName: string;
@@ -40,6 +40,19 @@ export function detectWindsurfConfigPath(home: string = homedir()): string {
   return resolve(home, ".codeium/windsurf/mcp_config.json");
 }
 
+export function detectAntigravityConfigPaths(home: string = homedir()): readonly string[] {
+  const paths: string[] = [resolve(home, ".gemini/config/mcp_config.json")];
+  const cliDir = resolve(home, ".gemini/antigravity-cli");
+  if (existsSync(cliDir)) {
+    paths.push(resolve(cliDir, "mcp_config.json"));
+  }
+  const ideDir = resolve(home, ".gemini/antigravity");
+  if (existsSync(ideDir)) {
+    paths.push(resolve(ideDir, "mcp_config.json"));
+  }
+  return paths;
+}
+
 export interface ClientTarget {
   readonly name: string;
   readonly type: AgentClientType;
@@ -69,6 +82,20 @@ export function detectInstalledClients(home: string = homedir()): readonly Clien
       configPath: detectWindsurfConfigPath(home),
     },
   ];
+
+  for (const configPath of detectAntigravityConfigPaths(home)) {
+    let name = "Antigravity";
+    if (configPath === resolve(home, ".gemini/antigravity-cli/mcp_config.json")) {
+      name = "Antigravity CLI";
+    } else if (configPath === resolve(home, ".gemini/antigravity/mcp_config.json")) {
+      name = "Antigravity IDE";
+    }
+    targets.push({
+      name,
+      type: "antigravity",
+      configPath,
+    });
+  }
 
   return targets;
 }
