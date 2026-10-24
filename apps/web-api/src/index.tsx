@@ -274,7 +274,7 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{`${post.title} | mol`}</title>
-        <script src="https://cdn.tailwindcss.com" />
+        <script src="https://cdn.tailwindcss.com?plugins=typography" />
       </head>
       <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
         <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur sticky top-0 z-50">
@@ -643,8 +643,17 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
         ? (caches as unknown as { default: Cache }).default
         : undefined;
     const cacheKeyUrl = new URL(c.req.url);
+    cacheKeyUrl.searchParams.set("__cv", "v2");
     cacheKeyUrl.searchParams.set("__accept_variant", formatVariant);
     const cacheKey = new Request(cacheKeyUrl.toString(), { method: "GET" });
+
+    // Evict old unversioned cache entries
+    if (cacheStorage) {
+      const oldUrl = new URL(c.req.url);
+      oldUrl.searchParams.set("__accept_variant", formatVariant);
+      await cacheStorage.delete(new Request(oldUrl.toString(), { method: "GET" })).catch(() => {});
+      await cacheStorage.delete(new Request(c.req.url, { method: "GET" })).catch(() => {});
+    }
 
     if (cacheStorage && !ownerIdParam) {
       const cachedRes = await cacheStorage.match(cacheKey);
