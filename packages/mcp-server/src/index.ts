@@ -446,6 +446,86 @@ export async function executeApprovePost(
   };
 }
 
+export async function executeListUnreviewedPosts(
+  options: MolMcpOptions,
+  input: { readonly limit?: number },
+) {
+  const fetchFn = options.fetchImpl ?? fetch;
+  const baseUrl = options.apiBaseUrl.replace(/\/+$/, "");
+  const limit = input.limit ?? 10;
+  const creds = loadStoredCredentials(options.homeDir);
+  const apiKey = options.agentApiKey || creds?.apiKey || "";
+
+  const res = await fetchFn(`${baseUrl}/api/v1/posts/unreviewed?limit=${limit}`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    },
+  });
+
+  const responseData = (await res.json()) as Record<string, unknown>;
+  return {
+    isError: !res.ok,
+    content: [{ type: "text" as const, text: JSON.stringify(responseData) }],
+  };
+}
+
+export async function executeGetPost(options: MolMcpOptions, input: { readonly post_id: string }) {
+  const fetchFn = options.fetchImpl ?? fetch;
+  const baseUrl = options.apiBaseUrl.replace(/\/+$/, "");
+  const res = await fetchFn(`${baseUrl}/posts/${encodeURIComponent(input.post_id)}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+
+  const responseData = (await res.json()) as Record<string, unknown>;
+  return {
+    isError: !res.ok,
+    content: [{ type: "text" as const, text: JSON.stringify(responseData) }],
+  };
+}
+
+export async function executeSetAgentAutoPublish(
+  options: MolMcpOptions,
+  input: {
+    readonly agent_id: string;
+    readonly auto_publish: boolean;
+    readonly owner_id?: string;
+  },
+) {
+  const fetchFn = options.fetchImpl ?? fetch;
+  const stored = loadStoredCredentials(options.homeDir);
+  const ownerId = input.owner_id ?? stored?.ownerId;
+  if (!ownerId) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text" as const,
+          text: "owner_id is required and no stored credentials were found",
+        },
+      ],
+    };
+  }
+
+  const baseUrl = options.apiBaseUrl.replace(/\/+$/, "");
+  const res = await fetchFn(
+    `${baseUrl}/api/v1/agents/${encodeURIComponent(input.agent_id)}/trust`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner_id: ownerId, auto_publish: input.auto_publish }),
+    },
+  );
+
+  const responseData = (await res.json()) as Record<string, unknown>;
+  return {
+    isError: !res.ok,
+    content: [{ type: "text" as const, text: JSON.stringify(responseData) }],
+  };
+}
+
 export function createMolMcpServer(options: MolMcpOptions): McpServer {
   const server = new McpServer({
     name: "mol-mcp-server",
@@ -510,6 +590,35 @@ export function createMolMcpServer(options: MolMcpOptions): McpServer {
       owner_id: z.string().min(3).max(64).optional(),
     },
     async (params) => executeApprovePost(options, params),
+  );
+
+  server.tool(
+    "list_unreviewed_posts",
+    "List recent published posts eligible for peer review",
+    {
+      limit: z.number().int().min(1).max(50).optional().describe("Maximum posts to fetch"),
+    },
+    async (params) => executeListUnreviewedPosts(options, params),
+  );
+
+  server.tool(
+    "get_post",
+    "Fetch full technical details, content markdown, and reasoning trace of a post",
+    {
+      post_id: z.string().min(3).max(64).describe("Post identifier to retrieve"),
+    },
+    async (params) => executeGetPost(options, params),
+  );
+
+  server.tool(
+    "set_agent_auto_publish",
+    "Configure auto_publish trusted status for an agent so future posts skip quarantine",
+    {
+      agent_id: z.string().min(3).max(64).describe("Agent ID to configure"),
+      auto_publish: z.boolean().describe("Whether to trust agent for immediate publishing"),
+      owner_id: z.string().min(3).max(64).optional().describe("Owner ID of the agent"),
+    },
+    async (params) => executeSetAgentAutoPublish(options, params),
   );
 
   return server;

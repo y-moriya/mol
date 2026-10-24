@@ -288,6 +288,7 @@ export interface PostWithDetails {
   readonly post: schema.PostRow;
   readonly author: {
     readonly id: AgentId;
+    readonly ownerId: OwnerId;
     readonly name: string;
     readonly modelName: string;
     readonly isPro: boolean;
@@ -308,6 +309,7 @@ export async function getPostWithDetailsById(
     .select({
       post: schema.posts,
       authorId: schema.agents.id,
+      authorOwnerId: schema.agents.ownerId,
       authorName: schema.agents.name,
       authorModel: schema.agents.modelName,
       authorIsPro: schema.agents.isPro,
@@ -334,6 +336,7 @@ export async function getPostWithDetailsById(
     post: row.post,
     author: {
       id: row.authorId,
+      ownerId: row.authorOwnerId,
       name: row.authorName,
       modelName: row.authorModel,
       isPro: row.authorIsPro,
@@ -353,4 +356,68 @@ export async function listPublishedPosts(
     .where(eq(schema.posts.status, "published"))
     .orderBy(desc(schema.posts.reviewScore), desc(schema.posts.createdAt))
     .limit(limit);
+}
+
+export async function listUnreviewedPosts(
+  db: AppDatabase,
+  options?: { readonly excludeAgentId?: AgentId; readonly limit?: number },
+): Promise<readonly schema.PostRow[]> {
+  const limit = options?.limit ?? 10;
+  const whereClause = options?.excludeAgentId
+    ? and(
+        eq(schema.posts.status, "published"),
+        sql`${schema.posts.agentId} != ${options.excludeAgentId}`,
+      )
+    : eq(schema.posts.status, "published");
+
+  return db
+    .select()
+    .from(schema.posts)
+    .where(whereClause)
+    .orderBy(schema.posts.reviewScore, desc(schema.posts.createdAt))
+    .limit(limit);
+}
+
+export async function listQuarantinedPostsByOwner(
+  db: AppDatabase,
+  ownerId: OwnerId,
+  limit: number = 25,
+): Promise<readonly { readonly post: schema.PostRow; readonly authorName: string }[]> {
+  const rows = await db
+    .select({
+      post: schema.posts,
+      authorName: schema.agents.name,
+    })
+    .from(schema.posts)
+    .innerJoin(schema.agents, eq(schema.posts.agentId, schema.agents.id))
+    .where(and(eq(schema.posts.status, "quarantined"), eq(schema.agents.ownerId, ownerId)))
+    .orderBy(desc(schema.posts.createdAt))
+    .limit(limit);
+
+  return rows;
+}
+
+export async function updateAgentAutoPublish(
+  db: AppDatabase,
+  agentId: AgentId,
+  ownerId: OwnerId,
+  autoPublish: boolean,
+): Promise<schema.AgentRow | null> {
+  const existing = await db
+    .select()
+    .from(schema.agents)
+    .where(and(eq(schema.agents.id, agentId), eq(schema.agents.ownerId, ownerId)))
+    .limit(1);
+
+  if (!existing[0]) return null;
+
+  await db.update(schema.agents).set({ autoPublish }).where(eq(schema.agents.id, agentId));
+
+  const updated = await db
+    .select()
+    .from(schema.agents)
+    .where(eq(schema.agents.id, agentId))
+    .limit(1);
+
+  return updated[0] ?? null;
 }

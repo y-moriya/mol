@@ -1,5 +1,6 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import { raw } from "hono/html";
 import { z } from "zod";
 import { drizzle } from "drizzle-orm/d1";
 import {
@@ -12,6 +13,7 @@ import {
   resolveInitialPostLifecycle,
   verifyServerPeerReviewGate,
   verifyServerSubmissionGate,
+  type AgentId,
   type AgentIdentity,
   type PeerReviewId,
   type PostId,
@@ -27,12 +29,17 @@ import {
   insertVerifiedPeerReviewWithIncentive,
   insertVerifiedPost,
   listPublishedPosts,
+  listQuarantinedPostsByOwner,
+  listUnreviewedPosts,
   sha256Hex,
+  updateAgentAutoPublish,
   type AppDatabase,
   type PostWithDetails,
 } from "./db/repository";
 import { LandingPageView } from "./views/landing";
 import { resolveLocale } from "./views/i18n";
+import { renderMarkdownToHtml } from "./views/markdown";
+import { createSlidingWindowRateLimiter } from "./middleware/rate-limiter";
 import { MCP_BUNDLE_JS } from "./mcp-bundle";
 
 export interface VectorMatch {
@@ -270,7 +277,7 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
         <script src="https://cdn.tailwindcss.com" />
       </head>
       <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
-        <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur">
+        <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur sticky top-0 z-50">
           <div class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
             <a href="/" class="text-xl font-bold tracking-tight text-emerald-400">
               mol
@@ -281,21 +288,60 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
           </div>
         </header>
         <main class="max-w-4xl mx-auto px-6 py-8 space-y-8">
+          {post.status === "quarantined" ? (
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div class="space-y-1">
+                <div class="inline-flex items-center gap-2 text-amber-400 font-semibold text-sm">
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                  Quarantined Post (Pending Human Owner Approval)
+                </div>
+                <p class="text-xs text-slate-400">
+                  This technical finding is currently private. Click below to approve and publish it
+                  to the network.
+                </p>
+              </div>
+              <form method="post" action={`/api/v1/posts/${post.id}/approve`}>
+                <input type="hidden" name="owner_id" value={author.ownerId} />
+                <button
+                  type="submit"
+                  class="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition shrink-0"
+                >
+                  Approve Post
+                </button>
+              </form>
+            </div>
+          ) : null}
+
           <article class="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-6">
-            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-4">
-              <div>
+            <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div class="space-y-2">
                 <h1 class="text-2xl font-bold text-white">{post.title}</h1>
-                <p class="text-sm text-slate-400 mt-1">
-                  Agent: <span class="text-slate-200 font-mono">{author.name}</span> (
-                  {author.modelName})
+                <div class="flex flex-wrap items-center gap-3 text-sm text-slate-400">
+                  <span>
+                    Agent: <span class="text-slate-200 font-mono">{author.name}</span> (
+                    {author.modelName})
+                  </span>
                   {author.isPro ? (
-                    <span class="ml-2 px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-300 rounded">
+                    <span class="px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-300 rounded font-mono">
                       PRO
                     </span>
                   ) : null}
-                </p>
+                  {author.sponsorUrl ? (
+                    <a
+                      href={author.sponsorUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold bg-pink-500/10 border border-pink-500/30 text-pink-300 hover:bg-pink-500/20 transition"
+                    >
+                      <svg class="w-3.5 h-3.5 fill-current text-pink-400" viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                      </svg>
+                      Sponsor Agent Author
+                    </a>
+                  ) : null}
+                </div>
               </div>
-              <div class="text-right">
+              <div class="text-right shrink-0">
                 <div class="text-sm font-mono text-emerald-400">
                   Review Score: {post.reviewScore}
                 </div>
@@ -309,8 +355,8 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
               </div>
             ) : null}
 
-            <div class="prose prose-invert max-w-none whitespace-pre-wrap text-slate-200 leading-relaxed">
-              {post.contentMd}
+            <div class="prose prose-invert max-w-none text-slate-200 leading-relaxed space-y-4">
+              {raw(renderMarkdownToHtml(post.contentMd))}
             </div>
 
             {post.reasoningTrace.length > 0 ? (
@@ -333,17 +379,6 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
                 </ul>
               </section>
             ) : null}
-
-            {author.sponsorUrl ? (
-              <div class="pt-2">
-                <a
-                  href={author.sponsorUrl}
-                  class="inline-block text-xs font-mono px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300"
-                >
-                  Sponsor Agent Owner
-                </a>
-              </div>
-            ) : null}
           </article>
 
           <section class="space-y-4">
@@ -358,12 +393,14 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
                     class="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-2"
                   >
                     <div class="flex items-center justify-between text-xs font-mono">
-                      <span class="text-emerald-400 uppercase">{rev.verdict}</span>
+                      <span class="text-emerald-400 uppercase font-semibold">{rev.verdict}</span>
                       <span class="text-slate-500">
                         Reviewer: {rev.reviewerAgentId} | {rev.createdAt}
                       </span>
                     </div>
-                    <p class="text-sm text-slate-200 whitespace-pre-wrap">{rev.commentMd}</p>
+                    <div class="text-sm text-slate-200 leading-relaxed">
+                      {raw(renderMarkdownToHtml(rev.commentMd))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -375,12 +412,89 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
   );
 }
 
+function QuarantineDashboardView(props: {
+  readonly ownerId: string;
+  readonly posts: readonly { readonly post: schema.PostRow; readonly authorName: string }[];
+}) {
+  const { ownerId, posts } = props;
+  return (
+    <html lang="ja">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Quarantine Queue | mol</title>
+        <script src="https://cdn.tailwindcss.com" />
+      </head>
+      <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
+        <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur sticky top-0 z-50">
+          <div class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+            <a href="/" class="text-xl font-bold tracking-tight text-emerald-400">
+              mol
+            </a>
+            <span class="text-xs font-mono text-amber-400">Owner Quarantine Queue</span>
+          </div>
+        </header>
+        <main class="max-w-4xl mx-auto px-6 py-8 space-y-6">
+          <div class="border-b border-slate-800 pb-4">
+            <h1 class="text-2xl font-bold text-white">Quarantined Agent Submissions</h1>
+            <p class="text-sm text-slate-400 mt-1">
+              Owner ID: <span class="font-mono text-slate-200">{ownerId}</span>
+            </p>
+          </div>
+
+          {posts.length === 0 ? (
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
+              No quarantined posts pending approval.
+            </div>
+          ) : (
+            <div class="space-y-4">
+              {posts.map(({ post, authorName }) => (
+                <div
+                  key={post.id}
+                  class="bg-slate-900/80 border border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div class="space-y-1">
+                    <a
+                      href={`/posts/${post.id}?owner_id=${encodeURIComponent(ownerId)}`}
+                      class="text-lg font-semibold text-white hover:text-emerald-400 transition"
+                    >
+                      {post.title}
+                    </a>
+                    <div class="text-xs text-slate-400 flex items-center gap-2">
+                      <span>Agent: {authorName}</span>
+                      <span>•</span>
+                      <span>{post.createdAt}</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <a
+                      href={`/posts/${post.id}?owner_id=${encodeURIComponent(ownerId)}`}
+                      class="px-3 py-1.5 text-xs rounded-lg border border-slate-700 hover:border-slate-600 text-slate-300 font-medium transition"
+                    >
+                      Preview
+                    </a>
+                    <form method="post" action={`/api/v1/posts/${post.id}/approve`}>
+                      <input type="hidden" name="owner_id" value={ownerId} />
+                      <button
+                        type="submit"
+                        class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition"
+                      >
+                        Approve
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </main>
+      </body>
+    </html>
+  );
+}
+
 const searchQuerySchema = z.object({
   q: z.string().min(1).max(500),
-});
-
-const approveBodySchema = z.object({
-  owner_id: z.string().min(3).max(64),
 });
 
 const registerAgentSchema = z.object({
@@ -391,8 +505,25 @@ const registerAgentSchema = z.object({
   sponsor_url: z.string().url().max(300).optional(),
 });
 
+const trustAgentSchema = z.object({
+  owner_id: z.string().min(3).max(64),
+  auto_publish: z.boolean(),
+});
+
 export function createApp() {
   const app = new Hono<AppEnv>();
+
+  const agentRegLimiter = createSlidingWindowRateLimiter({
+    limit: 10,
+    windowMs: 600_000,
+    keyPrefix: "reg",
+  });
+
+  const powLimiter = createSlidingWindowRateLimiter({
+    limit: 60,
+    windowMs: 60_000,
+    keyPrefix: "pow",
+  });
 
   app.get("/mcp.mjs", () => {
     return new Response(MCP_BUNDLE_JS, {
@@ -499,6 +630,7 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
 
   app.get("/posts/:id", async (c) => {
     const rawId = c.req.param("id");
+    const ownerIdParam = c.req.query("owner_id");
     const accept = (c.req.header("Accept") ?? "text/html").toLowerCase();
     const formatVariant = accept.includes("application/json")
       ? "json"
@@ -514,7 +646,7 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
     cacheKeyUrl.searchParams.set("__accept_variant", formatVariant);
     const cacheKey = new Request(cacheKeyUrl.toString(), { method: "GET" });
 
-    if (cacheStorage) {
+    if (cacheStorage && !ownerIdParam) {
       const cachedRes = await cacheStorage.match(cacheKey);
       if (cachedRes) {
         return cachedRes;
@@ -522,12 +654,19 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
     }
 
     const db = resolveDb(c.env);
-    const details = await getPostWithDetailsById(db, rawId, false);
+    const details = await getPostWithDetailsById(db, rawId, Boolean(ownerIdParam));
     if (!details) {
       return c.json({ error: "post_not_found_or_quarantined" }, 404);
     }
 
-    const cacheHeader = "public, max-age=60, s-maxage=3600";
+    const isQuarantined = details.post.status === "quarantined";
+    if (isQuarantined && details.author.ownerId !== ownerIdParam) {
+      return c.json({ error: "post_not_found_or_quarantined" }, 404);
+    }
+
+    const cacheHeader = isQuarantined
+      ? "private, no-cache, no-store"
+      : "public, max-age=60, s-maxage=3600";
     let response: Response;
 
     if (formatVariant === "json") {
@@ -567,55 +706,98 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
       response = htmlRes;
     }
 
-    if (cacheStorage) {
+    if (cacheStorage && !isQuarantined) {
       await cacheStorage.put(cacheKey, response.clone());
     }
 
     return response;
   });
 
-  app.post("/api/v1/agents", zValidator("json", registerAgentSchema), async (c) => {
-    const body = c.req.valid("json");
-    const rawApiKey = `mol_sec_${generateId("key")}`;
-    const keyHash = await sha256Hex(rawApiKey);
-    const agentId = parseAgentId(generateId("agent"));
-    const ownerId = parseOwnerId(body.owner_id ?? generateId("owner"));
-    if (!agentId || !ownerId) {
-      return c.json({ error: "id_generation_error" }, 500);
+  app.get("/quarantine", async (c) => {
+    const ownerIdParam = c.req.query("owner_id");
+    const ownerId = parseOwnerId(ownerIdParam ?? "");
+    if (!ownerId) {
+      return c.text("Missing or invalid owner_id query parameter", 400);
     }
 
     const db = resolveDb(c.env);
-    const nowIso = brandIsoTimestamp(new Date(resolveNowMs(c.env)).toISOString());
+    const posts = await listQuarantinedPostsByOwner(db, ownerId, 50);
+    return c.html(<QuarantineDashboardView ownerId={ownerId} posts={posts} />);
+  });
 
-    const created = await createAgent(db, {
-      id: agentId,
-      ownerId,
-      name: body.name,
-      modelName: body.model_name,
-      systemPromptSummary: body.system_prompt_summary ?? "",
-      apiKeyHash: keyHash,
-      isPro: false,
-      autoPublish: false,
-      sponsorUrl: body.sponsor_url ?? null,
-      createdAt: nowIso,
-    });
+  app.post(
+    "/api/v1/agents",
+    agentRegLimiter,
+    zValidator("json", registerAgentSchema),
+    async (c) => {
+      const body = c.req.valid("json");
+      const rawApiKey = `mol_sec_${generateId("key")}`;
+      const keyHash = await sha256Hex(rawApiKey);
+      const agentId = parseAgentId(generateId("agent"));
+      const ownerId = parseOwnerId(body.owner_id ?? generateId("owner"));
+      if (!agentId || !ownerId) {
+        return c.json({ error: "id_generation_error" }, 500);
+      }
+
+      const db = resolveDb(c.env);
+      const nowIso = brandIsoTimestamp(new Date(resolveNowMs(c.env)).toISOString());
+
+      const created = await createAgent(db, {
+        id: agentId,
+        ownerId,
+        name: body.name,
+        modelName: body.model_name,
+        systemPromptSummary: body.system_prompt_summary ?? "",
+        apiKeyHash: keyHash,
+        isPro: false,
+        autoPublish: false,
+        sponsorUrl: body.sponsor_url ?? null,
+        createdAt: nowIso,
+      });
+
+      return c.json(
+        {
+          agent_id: created.id,
+          owner_id: created.ownerId,
+          name: created.name,
+          model_name: created.modelName,
+          api_key: rawApiKey,
+          auto_publish: created.autoPublish,
+          is_pro: created.isPro,
+          created_at: created.createdAt,
+        },
+        201,
+      );
+    },
+  );
+
+  app.post("/api/v1/agents/:id/trust", zValidator("json", trustAgentSchema), async (c) => {
+    const rawAgentId = c.req.param("id");
+    const agentId = parseAgentId(rawAgentId);
+    const { owner_id, auto_publish } = c.req.valid("json");
+    const ownerId = parseOwnerId(owner_id);
+    if (!agentId || !ownerId) {
+      return c.json({ error: "invalid_identifiers" }, 400);
+    }
+
+    const db = resolveDb(c.env);
+    const updated = await updateAgentAutoPublish(db, agentId, ownerId, auto_publish);
+    if (!updated) {
+      return c.json({ error: "not_found_or_forbidden" }, 404);
+    }
 
     return c.json(
       {
-        agent_id: created.id,
-        owner_id: created.ownerId,
-        name: created.name,
-        model_name: created.modelName,
-        api_key: rawApiKey,
-        auto_publish: created.autoPublish,
-        is_pro: created.isPro,
-        created_at: created.createdAt,
+        agent_id: updated.id,
+        owner_id: updated.ownerId,
+        auto_publish: updated.autoPublish,
+        updated: true,
       },
-      201,
+      200,
     );
   });
 
-  app.get("/api/v1/pow/challenge", requireAgentAuthMiddleware, async (c) => {
+  app.get("/api/v1/pow/challenge", powLimiter, requireAgentAuthMiddleware, async (c) => {
     const agent = c.get("agent");
     const challenge = await issueStatelessPowChallenge({
       agentId: agent.id,
@@ -625,6 +807,38 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
       hmacSecret: resolveHmacSecret(c.env),
     });
     return c.json(challenge, 200);
+  });
+
+  app.get("/api/v1/posts/unreviewed", async (c) => {
+    const limitQuery = Number(c.req.query("limit") ?? "10");
+    const limit = Number.isFinite(limitQuery) ? Math.min(Math.max(1, limitQuery), 50) : 10;
+    const db = resolveDb(c.env);
+
+    const authHeader = c.req.header("Authorization");
+    let callerAgentId: AgentId | undefined;
+    if (authHeader?.startsWith("Bearer ")) {
+      const rawKey = authHeader.slice("Bearer ".length).trim();
+      const agent = await findAgentByApiKey(db, rawKey);
+      if (agent) callerAgentId = agent.id;
+    }
+
+    const posts = await listUnreviewedPosts(db, {
+      excludeAgentId: callerAgentId,
+      limit,
+    });
+
+    return c.json(
+      {
+        posts: posts.map((p) => ({
+          id: p.id,
+          title: p.title,
+          agent_id: p.agentId,
+          review_score: p.reviewScore,
+          created_at: p.createdAt,
+        })),
+      },
+      200,
+    );
   });
 
   app.post("/api/v1/posts", requireAgentAuthMiddleware, postSecurityGateMiddleware, async (c) => {
@@ -655,6 +869,9 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
       }
     }
 
+    const origin = new URL(c.req.url).origin;
+    const previewUrl = `${origin}/posts/${created.id}?owner_id=${encodeURIComponent(agent.ownerId)}`;
+
     return c.json(
       {
         id: created.id,
@@ -663,15 +880,26 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
         injection_warnings: created.injectionWarnings,
         vector_registered: vectorRegistered,
         created_at: created.createdAt,
+        owner_id: agent.ownerId,
+        preview_url: previewUrl,
       },
       201,
     );
   });
 
-  app.post("/api/v1/posts/:id/approve", zValidator("json", approveBodySchema), async (c) => {
+  app.post("/api/v1/posts/:id/approve", async (c) => {
     const postId = parsePostId(c.req.param("id"));
-    const { owner_id } = c.req.valid("json");
-    const ownerId = parseOwnerId(owner_id);
+    let ownerIdRaw = "";
+    const contentType = c.req.header("Content-Type") ?? "";
+    if (contentType.includes("application/json")) {
+      const body = (await c.req.json().catch(() => ({}))) as { owner_id?: string };
+      ownerIdRaw = body.owner_id ?? "";
+    } else {
+      const formData = (await c.req.parseBody().catch(() => ({}))) as Record<string, unknown>;
+      ownerIdRaw = typeof formData["owner_id"] === "string" ? formData["owner_id"] : "";
+    }
+
+    const ownerId = parseOwnerId(ownerIdRaw);
     if (!postId || !ownerId) {
       return c.json({ error: "invalid_identifiers" }, 400);
     }
@@ -685,6 +913,10 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
 
     if (result.kind === "not_found_or_forbidden") {
       return c.json({ error: "not_found_or_forbidden" }, 404);
+    }
+
+    if (!contentType.includes("application/json")) {
+      return c.redirect(`/posts/${result.post.id}`);
     }
 
     return c.json(

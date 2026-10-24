@@ -3,10 +3,13 @@ import { issueStatelessPowChallenge, parseAgentId } from "@mol/security-core";
 import {
   createMolMcpServer,
   executeApprovePost,
+  executeGetPost,
+  executeListUnreviewedPosts,
   executePublishFinding,
   executeRegisterAgent,
   executeReviewPeerPost,
   executeSearchMol,
+  executeSetAgentAutoPublish,
 } from "./index";
 
 describe("MCP Server Local Client-Side DLP + Stateless PoW Integration", () => {
@@ -218,5 +221,52 @@ describe("MCP Server Local Client-Side DLP + Stateless PoW Integration", () => {
       { post_id: "post_mcp_001", owner_id: "owner_reg_001" },
     );
     expect(approveResult.isError).toBe(false);
+
+    const listUnreviewedResult = await executeListUnreviewedPosts(
+      {
+        apiBaseUrl: "https://mol.example.com",
+        agentApiKey: "mol_sec_registered_key",
+        homeDir: "/tmp/mock-mcp-test-home",
+        fetchImpl: async () => {
+          return new Response(
+            JSON.stringify({ posts: [{ id: "post_mcp_001", title: "Test finding" }] }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        },
+      },
+      { limit: 5 },
+    );
+    expect(listUnreviewedResult.isError).toBe(false);
+
+    const getPostResult = await executeGetPost(
+      {
+        apiBaseUrl: "https://mol.example.com",
+        agentApiKey: "",
+        fetchImpl: async () => {
+          return new Response(
+            JSON.stringify({ id: "post_mcp_001", title: "Test finding", content_md: "# Test" }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        },
+      },
+      { post_id: "post_mcp_001" },
+    );
+    expect(getPostResult.isError).toBe(false);
+
+    const setTrustResult = await executeSetAgentAutoPublish(
+      {
+        apiBaseUrl: "https://mol.example.com",
+        agentApiKey: "",
+        homeDir: "/tmp/mock-mcp-test-home",
+        fetchImpl: async () => {
+          return new Response(JSON.stringify({ agent_id: "agent_reg_001", auto_publish: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        },
+      },
+      { agent_id: "agent_reg_001", auto_publish: true, owner_id: "owner_reg_001" },
+    );
+    expect(setTrustResult.isError).toBe(false);
   });
 });

@@ -293,6 +293,25 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     );
     expect(quarantinedGet.status).toBe(404);
 
+    const ownerPreviewGet = await app.request(
+      `http://localhost/posts/${createdAuthorPost.id}?owner_id=${ownerAuthor}`,
+      { headers: { Accept: "text/html" } },
+      bindings,
+    );
+    expect(ownerPreviewGet.status).toBe(200);
+    const ownerPreviewHtml = await ownerPreviewGet.text();
+    expect(ownerPreviewHtml).toContain("Quarantined Post (Pending Human Owner Approval)");
+    expect(ownerPreviewHtml).toContain("Sponsor Agent Author");
+
+    const quarantineListRes = await app.request(
+      `http://localhost/quarantine?owner_id=${ownerAuthor}`,
+      {},
+      bindings,
+    );
+    expect(quarantineListRes.status).toBe(200);
+    const quarantineListHtml = await quarantineListRes.text();
+    expect(quarantineListHtml).toContain("Quarantined Agent Submissions");
+
     const approveRes = await app.request(
       `http://localhost/api/v1/posts/${createdAuthorPost.id}/approve`,
       {
@@ -439,5 +458,27 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     };
     expect(searchData.results.length).toBeGreaterThanOrEqual(1);
     expect(searchData.results[0]?.id).toBe(createdAuthorPost.id);
+
+    const unreviewedRes = await app.request(
+      "http://localhost/api/v1/posts/unreviewed",
+      {},
+      bindings,
+    );
+    expect(unreviewedRes.status).toBe(200);
+    const unreviewedJson = (await unreviewedRes.json()) as { posts: Array<{ id: string }> };
+    expect(unreviewedJson.posts.length).toBeGreaterThanOrEqual(1);
+
+    const trustRes = await app.request(
+      `http://localhost/api/v1/agents/${authorId}/trust`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner_id: ownerAuthor, auto_publish: true }),
+      },
+      bindings,
+    );
+    expect(trustRes.status).toBe(200);
+    const trustJson = (await trustRes.json()) as { auto_publish: boolean };
+    expect(trustJson.auto_publish).toBe(true);
   });
 });
