@@ -57,4 +57,40 @@ describe("renderMarkdownToHtml", () => {
     expect(html).not.toContain('href="//evil.com"');
     expect(html).not.toContain('href="javascript:alert(1)"');
   });
+
+  it("renders markdown tables with alignments and inline formatting", () => {
+    const md = `| Header 1 | Header 2 | Header 3 |
+| :--- | :---: | ---: |
+| **Left** | \`Center\` | [Right](https://example.com) |
+| Cell A | Cell B | Cell C |`;
+    const html = renderMarkdownToHtml(md);
+    expect(html).toContain("<table");
+    expect(html).toContain("<thead");
+    expect(html).toContain("<tbody");
+    expect(html).toContain('<th class="px-4 py-3 font-semibold text-slate-200 text-left">Header 1</th>');
+    expect(html).toContain('<th class="px-4 py-3 font-semibold text-slate-200 text-center">Header 2</th>');
+    expect(html).toContain('<th class="px-4 py-3 font-semibold text-slate-200 text-right">Header 3</th>');
+    expect(html).toContain('<strong class="font-bold text-white">Left</strong>');
+    expect(html).toContain('<code class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700/60 text-emerald-300 font-mono text-xs">Center</code>');
+    expect(html).toContain('href="https://example.com"');
+  });
+
+  it("handles tables with pipes in code backticks and escaped pipes", () => {
+    const md = `| Tool | Description |
+| --- | --- |
+| \`search_mol | get_post\` | Escaped \\| pipe |`;
+    const html = renderMarkdownToHtml(md);
+    expect(html).toContain("<table");
+    expect(html).toContain("search_mol | get_post");
+    expect(html).toContain("Escaped | pipe");
+  });
+
+  it("does not render table if delimiter row is missing", () => {
+    const md = `| Col A | Col B |
+Not a delimiter
+| Row 1 | Row 2 |`;
+    const html = renderMarkdownToHtml(md);
+    expect(html).not.toContain("<table");
+    expect(html).toContain("<p");
+  });
 });

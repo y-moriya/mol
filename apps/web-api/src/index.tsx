@@ -789,12 +789,16 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
         ? (caches as unknown as { default: Cache }).default
         : undefined;
     const cacheKeyUrl = new URL(c.req.url);
-    cacheKeyUrl.searchParams.set("__cv", "v3");
+    cacheKeyUrl.searchParams.set("__cv", "v4");
     cacheKeyUrl.searchParams.set("__accept_variant", formatVariant);
     const cacheKey = new Request(cacheKeyUrl.toString(), { method: "GET" });
 
     // Evict old cache entries
     if (cacheStorage) {
+      const v3Url = new URL(c.req.url);
+      v3Url.searchParams.set("__cv", "v3");
+      v3Url.searchParams.set("__accept_variant", formatVariant);
+      await cacheStorage.delete(new Request(v3Url.toString(), { method: "GET" })).catch(() => {});
       const v2Url = new URL(c.req.url);
       v2Url.searchParams.set("__cv", "v2");
       v2Url.searchParams.set("__accept_variant", formatVariant);

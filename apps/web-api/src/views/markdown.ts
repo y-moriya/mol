@@ -34,6 +34,112 @@ function renderInline(text: string): string {
   return escaped;
 }
 
+type ColumnAlignment = "left" | "center" | "right";
+
+function splitTableRow(line: string): string[] {
+  let content = line.trim();
+  if (content.startsWith("|")) {
+    content = content.slice(1);
+  }
+  if (content.endsWith("|") && !content.endsWith("\\|")) {
+    content = content.slice(0, -1);
+  }
+
+  const cells: string[] = [];
+  let current = "";
+  let inBacktick = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    const prevChar = i > 0 ? content[i - 1] : "";
+
+    if (char === "`" && prevChar !== "\\") {
+      inBacktick = !inBacktick;
+      current += char;
+    } else if (char === "|" && prevChar !== "\\" && !inBacktick) {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function isDelimiterRow(cells: string[]): boolean {
+  if (cells.length === 0) return false;
+  return cells.every((c) => /^:?-{1,}:?$/.test(c.trim()));
+}
+
+function parseAlignments(delimiterCells: string[]): ColumnAlignment[] {
+  return delimiterCells.map((cell) => {
+    const c = cell.trim();
+    const start = c.startsWith(":");
+    const end = c.endsWith(":");
+    if (start && end) return "center";
+    if (end) return "right";
+    return "left";
+  });
+}
+
+function getAlignmentClass(alignment: ColumnAlignment): string {
+  if (alignment === "center") return "text-center";
+  if (alignment === "right") return "text-right";
+  return "text-left";
+}
+
+function renderTableCell(cellText: string): string {
+  const unescaped = cellText.replace(/\\\|/g, "|");
+  return renderInline(unescaped);
+}
+
+function renderTableHtml(
+  headerCells: string[],
+  alignments: ColumnAlignment[],
+  bodyRows: string[][],
+): string {
+  const colCount = Math.max(headerCells.length, alignments.length);
+
+  const thHtml = headerCells
+    .map((h, idx) => {
+      const align = alignments[idx] ?? "left";
+      const alignClass = getAlignmentClass(align);
+      return `<th class="px-4 py-3 font-semibold text-slate-200 ${alignClass}">${renderTableCell(h)}</th>`;
+    })
+    .join("\n        ");
+
+  const trsHtml = bodyRows
+    .map((row) => {
+      const tds: string[] = [];
+      for (let c = 0; c < colCount; c++) {
+        const cell = row[c] ?? "";
+        const align = alignments[c] ?? "left";
+        const alignClass = getAlignmentClass(align);
+        tds.push(
+          `<td class="px-4 py-3 leading-relaxed ${alignClass}">${renderTableCell(cell)}</td>`,
+        );
+      }
+      return `      <tr class="hover:bg-slate-800/30 transition-colors">\n        ${tds.join("\n        ")}\n      </tr>`;
+    })
+    .join("\n");
+
+  return [
+    '<div class="overflow-x-auto my-6 border border-slate-800 rounded-xl">',
+    '  <table class="w-full text-left text-sm text-slate-300 border-collapse">',
+    '    <thead class="bg-slate-900/90 text-xs uppercase text-slate-400 border-b border-slate-800 font-mono">',
+    "      <tr>",
+    `        ${thHtml}`,
+    "      </tr>",
+    "    </thead>",
+    '    <tbody class="divide-y divide-slate-800/60 bg-slate-900/30">',
+    trsHtml,
+    "    </tbody>",
+    "  </table>",
+    "</div>",
+  ].join("\n");
+}
+
 export function renderMarkdownToHtml(markdown: string): string {
   const lines = markdown.split("\n");
   const htmlOut: string[] = [];
@@ -80,6 +186,40 @@ export function renderMarkdownToHtml(markdown: string): string {
     if (!trimmed) {
       closeList();
       continue;
+    }
+
+    // Table check: line must contain '|' and the immediately following line must be a delimiter row
+    if (trimmed.includes("|") && i + 1 < lines.length) {
+      const nextLine = (lines[i + 1] ?? "").trim();
+      if (nextLine.includes("|") || /^:?-{1,}:?/.test(nextLine)) {
+        const headerCells = splitTableRow(rawLine);
+        const delimiterCells = splitTableRow(nextLine);
+        if (
+          headerCells.length > 0 &&
+          delimiterCells.length > 0 &&
+          isDelimiterRow(delimiterCells)
+        ) {
+          closeList();
+          const alignments = parseAlignments(delimiterCells);
+          const bodyRows: string[][] = [];
+          let j = i + 2;
+          while (j < lines.length) {
+            const rowLine = lines[j] ?? "";
+            const trimmedRow = rowLine.trim();
+            if (!trimmedRow || !trimmedRow.includes("|")) {
+              break;
+            }
+            if (trimmedRow.startsWith("```") || trimmedRow.startsWith("#")) {
+              break;
+            }
+            bodyRows.push(splitTableRow(rowLine));
+            j++;
+          }
+          i = j - 1;
+          htmlOut.push(renderTableHtml(headerCells, alignments, bodyRows));
+          continue;
+        }
+      }
     }
 
     // Horizontal Rule
