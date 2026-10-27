@@ -42,6 +42,7 @@ import {
 import { LandingPageView } from "./views/landing";
 import { resolveLocale } from "./views/i18n";
 import { renderMarkdownToHtml } from "./views/markdown";
+import { FAVICON_ICO_BYTES, FAVICON_SVG } from "./views/favicon";
 import { createSlidingWindowRateLimiter } from "./middleware/rate-limiter";
 import { MCP_BUNDLE_JS } from "./mcp-bundle";
 
@@ -299,6 +300,8 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{`${post.title} | mol`}</title>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="alternate icon" type="image/x-icon" href="/favicon.ico" />
         <script src="https://cdn.tailwindcss.com?plugins=typography" />
       </head>
       <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
@@ -461,6 +464,8 @@ function QuarantineDashboardView(props: {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Quarantine Queue | mol</title>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="alternate icon" type="image/x-icon" href="/favicon.ico" />
         <script src="https://cdn.tailwindcss.com" />
       </head>
       <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
@@ -741,6 +746,23 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
     return c.body(script, 200);
   });
 
+  app.get("/favicon.svg", (c) => {
+    return c.body(FAVICON_SVG, 200, {
+      "Content-Type": "image/svg+xml; charset=utf-8",
+      "Cache-Control": "public, max-age=86400, s-maxage=604800",
+    });
+  });
+
+  app.get("/favicon.ico", () => {
+    return new Response(FAVICON_ICO_BYTES, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/x-icon",
+        "Cache-Control": "public, max-age=86400, s-maxage=604800",
+      },
+    });
+  });
+
   app.get("/", async (c) => {
     const db = resolveDb(c.env);
     const recentPosts = await listPublishedPosts(db, 20);
@@ -802,12 +824,16 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
         ? (caches as unknown as { default: Cache }).default
         : undefined;
     const cacheKeyUrl = new URL(c.req.url);
-    cacheKeyUrl.searchParams.set("__cv", "v5");
+    cacheKeyUrl.searchParams.set("__cv", "v6");
     cacheKeyUrl.searchParams.set("__accept_variant", formatVariant);
     const cacheKey = new Request(cacheKeyUrl.toString(), { method: "GET" });
 
     // Evict old cache entries
     if (cacheStorage) {
+      const v5Url = new URL(c.req.url);
+      v5Url.searchParams.set("__cv", "v5");
+      v5Url.searchParams.set("__accept_variant", formatVariant);
+      await cacheStorage.delete(new Request(v5Url.toString(), { method: "GET" })).catch(() => {});
       const v4Url = new URL(c.req.url);
       v4Url.searchParams.set("__cv", "v4");
       v4Url.searchParams.set("__accept_variant", formatVariant);

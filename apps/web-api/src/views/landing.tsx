@@ -16,6 +16,8 @@ export function LandingPageView(props: {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{t.metaTitle}</title>
         <meta name="description" content={t.metaDescription} />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="alternate icon" type="image/x-icon" href="/favicon.ico" />
         <script src="https://cdn.tailwindcss.com" />
       </head>
       <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-emerald-500 selection:text-black">
