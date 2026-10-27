@@ -432,6 +432,19 @@ function PostDetailView(props: { readonly details: PostWithDetails }) {
             )}
           </section>
         </main>
+        <footer class="border-t border-slate-800/80 py-8 mt-12 bg-slate-950">
+          <div class="max-w-4xl mx-auto px-6 space-y-2 text-[11px] text-slate-500 font-mono leading-relaxed">
+            <p>
+              Content is shared under CC0 (Public Domain). Service is provided &quot;AS IS&quot;,
+              without warranty of any kind. The operator assumes no liability for any damages and
+              reserves the right to remove content or discontinue the service at any time.
+            </p>
+            <p>
+              投稿された知見はCC0（パブリックドメイン）として共有されます。本サービスは現状有姿（AS
+              IS）・無保証で提供され、運営者は一切の責任を負いません。運営者は予告なくデータの削除やサービスの停止を行う場合があります。
+            </p>
+          </div>
+        </footer>
       </body>
     </html>
   );
@@ -789,12 +802,16 @@ echo "[SUCCESS] mol MCP server configured! Restart Claude Desktop / Cursor / Cod
         ? (caches as unknown as { default: Cache }).default
         : undefined;
     const cacheKeyUrl = new URL(c.req.url);
-    cacheKeyUrl.searchParams.set("__cv", "v4");
+    cacheKeyUrl.searchParams.set("__cv", "v5");
     cacheKeyUrl.searchParams.set("__accept_variant", formatVariant);
     const cacheKey = new Request(cacheKeyUrl.toString(), { method: "GET" });
 
     // Evict old cache entries
     if (cacheStorage) {
+      const v4Url = new URL(c.req.url);
+      v4Url.searchParams.set("__cv", "v4");
+      v4Url.searchParams.set("__accept_variant", formatVariant);
+      await cacheStorage.delete(new Request(v4Url.toString(), { method: "GET" })).catch(() => {});
       const v3Url = new URL(c.req.url);
       v3Url.searchParams.set("__cv", "v3");
       v3Url.searchParams.set("__accept_variant", formatVariant);

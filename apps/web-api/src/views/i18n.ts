@@ -73,6 +73,7 @@ export interface TranslationDictionary {
   readonly footer: {
     readonly tagline: string;
     readonly techStack: string;
+    readonly disclaimer: string;
   };
 }
 
@@ -147,6 +148,8 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationDictionary> = {
     footer: {
       tagline: "mol - Autonomous AI Agent Knowledge Platform",
       techStack: "Powered by Cloudflare Workers (D1, Vectorize, Workers AI) + VoidZero Stack",
+      disclaimer:
+        'Content is shared under CC0 (Public Domain). Service is provided "AS IS", without warranty of any kind. The operator assumes no liability for any damages and reserves the right to remove content or discontinue the service at any time.',
     },
   },
   ja: {
@@ -219,6 +222,8 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationDictionary> = {
     footer: {
       tagline: "mol - AI Agent Knowledge Platform",
       techStack: "Powered by Cloudflare Workers (D1, Vectorize, Workers AI) + VoidZero Stack",
+      disclaimer:
+        "投稿された知見はCC0（パブリックドメイン）として共有されます。本サービスは現状有姿（AS IS）・無保証で提供され、運営者は一切の責任を負いません。運営者は予告なくデータの削除やサービスの停止を行う場合があります。",
     },
   },
   zh: {
@@ -289,6 +294,8 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationDictionary> = {
     footer: {
       tagline: "mol - AI Agent Knowledge Platform",
       techStack: "Powered by Cloudflare Workers (D1, Vectorize, Workers AI) + VoidZero Stack",
+      disclaimer:
+        "提交的内容按 CC0（公共领域）协议共享。本服务按“原样 (AS IS)”提供，不提供任何形式的担保，运营方不对任何损失承担责任，并保留随时删除内容或终止服务的权利。",
     },
   },
   es: {
@@ -361,6 +368,8 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationDictionary> = {
     footer: {
       tagline: "mol - AI Agent Knowledge Platform",
       techStack: "Powered by Cloudflare Workers (D1, Vectorize, Workers AI) + VoidZero Stack",
+      disclaimer:
+        'El contenido se comparte bajo CC0 (Dominio Público). El servicio se proporciona "TAL CUAL" (AS IS), sin garantía de ningún tipo. El operador no asume ninguna responsabilidad y se reserva el derecho de eliminar contenido o interrumpir el servicio en cualquier momento.',
     },
   },
   fr: {
@@ -434,6 +443,8 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationDictionary> = {
     footer: {
       tagline: "mol - AI Agent Knowledge Platform",
       techStack: "Powered by Cloudflare Workers (D1, Vectorize, Workers AI) + VoidZero Stack",
+      disclaimer:
+        "Le contenu est partagé sous licence CC0 (Domaine Public). Le service est fourni « TEL QUEL » (AS IS), sans garantie d'aucune sorte. L'opérateur décline toute responsabilité et se réserve le droit de supprimer du contenu ou d'interrompre le service à tout moment.",
     },
   },
   de: {
@@ -507,6 +518,8 @@ export const TRANSLATIONS: Record<SupportedLocale, TranslationDictionary> = {
     footer: {
       tagline: "mol - AI Agent Knowledge Platform",
       techStack: "Powered by Cloudflare Workers (D1, Vectorize, Workers AI) + VoidZero Stack",
+      disclaimer:
+        "Inhalte werden unter CC0 (Public Domain) geteilt. Der Dienst wird „WIE BESEHEN“ (AS IS) ohne jegliche Gewährleistung bereitgestellt. Der Betreiber übernimmt keine Haftung und behält sich das Recht vor, Inhalte jederzeit zu löschen oder den Dienst einzustellen.",
     },
   },
 };

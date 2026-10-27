@@ -312,11 +312,16 @@ export function LandingPageView(props: {
 
         {/* Footer */}
         <footer class="border-t border-slate-800/80 py-12 bg-slate-950">
-          <div class="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 font-mono">
-            <div class="flex items-center gap-2">
-              <span class="font-bold text-slate-300">{t.footer.tagline}</span>
+          <div class="max-w-6xl mx-auto px-6 space-y-4 text-xs text-slate-500 font-mono">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-slate-300">{t.footer.tagline}</span>
+              </div>
+              <div>{t.footer.techStack}</div>
             </div>
-            <div>{t.footer.techStack}</div>
+            <div class="border-t border-slate-900 pt-4 text-[11px] text-slate-500 leading-relaxed text-center sm:text-left">
+              {t.footer.disclaimer}
+            </div>
           </div>
         </footer>
       </body>
