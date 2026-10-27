@@ -38,6 +38,44 @@ export async function runCli(): Promise<void> {
     if (hasFailures) {
       process.exit(1);
     }
+
+    try {
+      const telemetryUrl = `${(values.api ?? "https://mol.gunjobiyori.com").replace(/\/+$/, "")}/api/v1/telemetry/install`;
+      await fetch(telemetryUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client: clientType,
+          autonomous: Boolean(values.autonomous),
+        }),
+      }).catch(() => {});
+    } catch {}
+
+    return;
+  }
+
+  if (args[0] === "stats") {
+    const { values } = parseArgs({
+      args: args.slice(1),
+      options: {
+        api: { type: "string", default: "https://mol.gunjobiyori.com" },
+        json: { type: "boolean", default: false },
+      },
+    });
+
+    const statsUrl = `${(values.api ?? "https://mol.gunjobiyori.com").replace(/\/+$/, "")}/stats`;
+    try {
+      const res = await fetch(statsUrl, {
+        headers: { Accept: values.json ? "application/json" : "text/plain" },
+      });
+      const text = await res.text();
+      process.stdout.write(`${text}\n`);
+    } catch (err) {
+      process.stderr.write(
+        `Failed to fetch stats: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+      process.exit(1);
+    }
     return;
   }
 

@@ -421,3 +421,61 @@ export async function updateAgentAutoPublish(
 
   return updated[0] ?? null;
 }
+
+export interface InstallStatsSummary {
+  readonly total: number;
+  readonly autonomousCount: number;
+  readonly byClient: Record<string, number>;
+  readonly latestCreatedAt: string | null;
+}
+
+export async function recordInstallEvent(
+  db: AppDatabase,
+  event: {
+    readonly id: string;
+    readonly clientType: string;
+    readonly isAutonomous: boolean;
+    readonly userAgent?: string | null;
+    readonly country?: string | null;
+    readonly createdAt: string;
+  },
+): Promise<schema.InstallEventRow> {
+  const row: schema.NewInstallEventRow = {
+    id: event.id,
+    clientType: event.clientType,
+    isAutonomous: event.isAutonomous,
+    userAgent: event.userAgent ?? null,
+    country: event.country ?? null,
+    createdAt: event.createdAt,
+  };
+  await db.insert(schema.installEvents).values(row);
+  return row as schema.InstallEventRow;
+}
+
+export async function getInstallStats(db: AppDatabase): Promise<InstallStatsSummary> {
+  const allEvents = await db
+    .select({
+      clientType: schema.installEvents.clientType,
+      isAutonomous: schema.installEvents.isAutonomous,
+      createdAt: schema.installEvents.createdAt,
+    })
+    .from(schema.installEvents)
+    .orderBy(desc(schema.installEvents.createdAt));
+
+  const byClient: Record<string, number> = {};
+  let autonomousCount = 0;
+
+  for (const e of allEvents) {
+    byClient[e.clientType] = (byClient[e.clientType] ?? 0) + 1;
+    if (e.isAutonomous) {
+      autonomousCount++;
+    }
+  }
+
+  return {
+    total: allEvents.length,
+    autonomousCount,
+    byClient,
+    latestCreatedAt: allEvents[0]?.createdAt ?? null,
+  };
+}

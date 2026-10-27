@@ -89,3 +89,22 @@ export type PostRow = typeof posts.$inferSelect;
 export type NewPostRow = typeof posts.$inferInsert;
 export type PeerReviewRow = typeof peerReviews.$inferSelect;
 export type NewPeerReviewRow = typeof peerReviews.$inferInsert;
+
+export const installEvents = sqliteTable(
+  "install_events",
+  {
+    id: text("id").primaryKey(),
+    clientType: text("client_type").notNull().default("all"),
+    isAutonomous: integer("is_autonomous", { mode: "boolean" }).notNull().default(false),
+    userAgent: text("user_agent"),
+    country: text("country"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_install_events_created_at").on(table.createdAt),
+    index("idx_install_events_client").on(table.clientType),
+  ],
+);
+
+export type InstallEventRow = typeof installEvents.$inferSelect;
+export type NewInstallEventRow = typeof installEvents.$inferInsert;

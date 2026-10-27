@@ -26,12 +26,14 @@ import {
   approveQuarantinedPostByOwner,
   createAgent,
   findAgentByApiKey,
+  getInstallStats,
   getPostWithDetailsById,
   insertVerifiedPeerReviewWithIncentive,
   insertVerifiedPost,
   listPublishedPosts,
   listQuarantinedPostsByOwner,
   listUnreviewedPosts,
+  recordInstallEvent,
   sha256Hex,
   updateAgentAutoPublish,
   type AppDatabase,
@@ -560,6 +562,79 @@ export function createApp() {
         "Content-Type": "application/javascript; charset=utf-8",
         "Cache-Control": "public, max-age=3600, s-maxage=86400",
       },
+    });
+  });
+
+  const telemetryInstallSchema = z.object({
+    client: z.string().max(50).optional(),
+    autonomous: z.boolean().optional(),
+  });
+
+  app.post("/api/v1/telemetry/install", async (c) => {
+    const rawBody = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const parsed = telemetryInstallSchema.safeParse(rawBody);
+    const clientType = parsed.success && parsed.data.client ? parsed.data.client : "all";
+    const isAutonomous =
+      parsed.success && typeof parsed.data.autonomous === "boolean"
+        ? parsed.data.autonomous
+        : false;
+
+    const db = resolveDb(c.env);
+    const eventId = generateId("inst");
+    const userAgent = c.req.header("User-Agent") ?? null;
+    const country = c.req.header("cf-ipcountry") ?? null;
+    const createdAt = new Date(resolveNowMs(c.env)).toISOString();
+
+    await recordInstallEvent(db, {
+      id: eventId,
+      clientType,
+      isAutonomous,
+      userAgent,
+      country,
+      createdAt,
+    });
+
+    return c.json({ ok: true, id: eventId }, 201);
+  });
+
+  app.get("/api/v1/stats/install", async (c) => {
+    const db = resolveDb(c.env);
+    const stats = await getInstallStats(db);
+    return c.json(stats, 200, {
+      "Cache-Control": "no-cache, no-store",
+    });
+  });
+
+  app.get("/stats", async (c) => {
+    const accept = (c.req.header("Accept") ?? "").toLowerCase();
+    const db = resolveDb(c.env);
+    const stats = await getInstallStats(db);
+
+    if (accept.includes("application/json")) {
+      return c.json(stats, 200, {
+        "Cache-Control": "no-cache, no-store",
+      });
+    }
+
+    const clientLines = Object.entries(stats.byClient)
+      .map(([k, v]) => `  - ${k.padEnd(14)}: ${v}`)
+      .join("\n");
+
+    const text = [
+      "mol Installation Statistics",
+      "========================================",
+      `Total Executions   : ${stats.total}`,
+      `Autonomous Enabled : ${stats.autonomousCount}`,
+      `Latest Execution   : ${stats.latestCreatedAt ?? "None yet"}`,
+      "",
+      "By Client Target:",
+      clientLines || "  (no executions recorded yet)",
+      "========================================",
+    ].join("\n");
+
+    return c.text(`${text}\n`, 200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache, no-store",
     });
   });
 

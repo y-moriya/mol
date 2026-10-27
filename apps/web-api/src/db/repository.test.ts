@@ -57,6 +57,15 @@ CREATE TABLE peer_reviews (
   created_at TEXT NOT NULL,
   UNIQUE(post_id, reviewer_agent_id)
 );
+
+CREATE TABLE install_events (
+  id TEXT PRIMARY KEY NOT NULL,
+  client_type TEXT NOT NULL DEFAULT 'all',
+  is_autonomous INTEGER NOT NULL DEFAULT 0,
+  user_agent TEXT,
+  country TEXT,
+  created_at TEXT NOT NULL
+);
 `;
 
 function createInMemoryDb(): AppDatabase {

@@ -46,6 +46,15 @@ CREATE TABLE peer_reviews (
   created_at TEXT NOT NULL,
   UNIQUE(post_id, reviewer_agent_id)
 );
+
+CREATE TABLE install_events (
+  id TEXT PRIMARY KEY NOT NULL,
+  client_type TEXT NOT NULL DEFAULT 'all',
+  is_autonomous INTEGER NOT NULL DEFAULT 0,
+  user_agent TEXT,
+  country TEXT,
+  created_at TEXT NOT NULL
+);
 `;
 
 function createTestEnvironment() {
@@ -518,5 +527,75 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
       bindings,
     );
     expect(hijackRes.status).toBe(403);
+  });
+
+  it("records installation telemetry and surfaces metrics via /stats and /api/v1/stats/install", async () => {
+    const { bindings } = createTestEnvironment();
+    const app = createApp();
+
+    // 1. Initial stats should be empty
+    const initStatsRes = await app.request("http://localhost/api/v1/stats/install", {}, bindings);
+    expect(initStatsRes.status).toBe(200);
+    const initStats = (await initStatsRes.json()) as { total: number; autonomousCount: number };
+    expect(initStats.total).toBe(0);
+    expect(initStats.autonomousCount).toBe(0);
+
+    // 2. Record first installation (antigravity with autonomous enabled)
+    const install1Res = await app.request(
+      "http://localhost/api/v1/telemetry/install",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "curl/8.5.0",
+          "cf-ipcountry": "JP",
+        },
+        body: JSON.stringify({
+          client: "antigravity",
+          autonomous: true,
+        }),
+      },
+      bindings,
+    );
+    expect(install1Res.status).toBe(201);
+
+    // 3. Record second installation (all clients without autonomous)
+    const install2Res = await app.request(
+      "http://localhost/api/v1/telemetry/install",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client: "all",
+          autonomous: false,
+        }),
+      },
+      bindings,
+    );
+    expect(install2Res.status).toBe(201);
+
+    // 4. Verify structured JSON stats endpoint
+    const statsJsonRes = await app.request("http://localhost/api/v1/stats/install", {}, bindings);
+    expect(statsJsonRes.status).toBe(200);
+    const statsJson = (await statsJsonRes.json()) as {
+      total: number;
+      autonomousCount: number;
+      byClient: Record<string, number>;
+      latestCreatedAt: string;
+    };
+    expect(statsJson.total).toBe(2);
+    expect(statsJson.autonomousCount).toBe(1);
+    expect(statsJson.byClient["antigravity"]).toBe(1);
+    expect(statsJson.byClient["all"]).toBe(1);
+    expect(statsJson.latestCreatedAt).toBeDefined();
+
+    // 5. Verify human-readable terminal text endpoint
+    const statsTextRes = await app.request("http://localhost/stats", {}, bindings);
+    expect(statsTextRes.status).toBe(200);
+    const textOutput = await statsTextRes.text();
+    expect(textOutput).toContain("mol Installation Statistics");
+    expect(textOutput).toContain("Total Executions   : 2");
+    expect(textOutput).toContain("Autonomous Enabled : 1");
+    expect(textOutput).toContain("antigravity");
   });
 });
