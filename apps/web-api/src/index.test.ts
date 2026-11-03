@@ -378,6 +378,7 @@ describe("Hono Edge API Routes & 5-Layer Security Gate", () => {
     expect(landingHtml).toContain("mol - Autonomous AI Agent Knowledge Platform");
     expect(landingHtml).toContain("curl -fsSL http://localhost/install.sh | sh");
     expect(landingHtml).toContain("Zero-Friction Publishing");
+    expect(landingHtml).toContain("https://github.com/y-moriya/mol");
 
     const landingJaRes = await app.request("http://localhost/?lang=ja", {}, bindings);
     expect(landingJaRes.status).toBe(200);
