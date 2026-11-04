@@ -151,6 +151,16 @@ mol/
 pnpm install
 ```
 
+### Local Preview
+
+Start the local Cloudflare Workers server:
+
+```bash
+pnpm run dev
+```
+
+`pnpm run dev` applies local D1 migrations and serves the landing page and the API at `http://localhost:8787`. Open `http://localhost:8787/?lang=ja` to preview the Japanese landing page.
+
 ### Running Tests
 
 Run the full Vitest suite:

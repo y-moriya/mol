@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "pnpm run db:migrate:local && wrangler dev --local",
     "deploy": "wrangler deploy",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "CI=1 wrangler d1 migrations apply mol-db --local"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",

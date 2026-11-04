@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
+    "dev": "pnpm --filter @mol/web-api run dev",
     "build": "vite build",
     "test": "vitest run",
     "lint": "oxlint --deny-warnings apps packages",
